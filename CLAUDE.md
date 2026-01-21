@@ -136,15 +136,19 @@ golangci-lint run
 - `protocol/`: Shared types (SleeveStatus, Message, SpawnRequest, ResleeveRequest)
 - `config/`: YAML configuration loading with environment variable substitution
 
-### State Management (Cortical Stack)
+### State Management
 
-Sleeve state uses the cortical-stack format - markdown files in `.cstack/`:
+**Cortical Stack (Memory)** - Sleeve's own state in `.cstack/`:
 - `CURRENT.md`: Active task, current focus, next steps
 - `PLAN.md`: Task list, backlog, notes
-- `INBOX.md`: Messages FROM envoy/other sleeves
-- `OUTBOX.md`: Messages TO envoy (read and cleared by envoy)
+- `MEMORY.md`: Long-term context, decisions, learnings
 
 See: [cortical-stack](https://github.com/hotschmoe/cortical-stack) for the memory format specification.
+
+**Needlecast (Communication)** - Inter-sleeve messaging in `/needlecast/`:
+- `{sleeve}/INBOX.md`: Messages TO this sleeve
+- `{sleeve}/OUTBOX.md`: Messages FROM this sleeve (read and cleared by envoy)
+- `arena/GLOBAL.md`: Broadcast messages for all sleeves
 
 ### API Ports
 
@@ -173,7 +177,8 @@ See: [cortical-stack](https://github.com/hotschmoe/cortical-stack) for the memor
 | Protectorate | The orchestration framework (this repo) |
 | Envoy | The manager process/CLI tool |
 | Sleeve | Agent container (the body) |
-| Cortical Stack | Agent memory format (.cstack/) |
+| Cortical Stack | Agent memory format (.cstack/) - what the sleeve knows |
+| Needlecast | Inter-sleeve communication (/needlecast/) - what sleeves say/hear |
 | DHF | The AI consciousness (Claude Code, Gemini CLI, etc.) |
 | Resleeve | Switch CLI (soft) or respawn container (hard) |
 

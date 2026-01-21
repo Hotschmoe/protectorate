@@ -4,13 +4,78 @@
 
 V1 is single-machine deployment with core sleeve management, message routing, and local git infrastructure.
 
+**V1 Constraint**: Only Claude Code is supported as the AI CLI. Multi-CLI support deferred to V2.
+
+## Sub-Specifications
+
+- **[SPEC_V1_ENVOY.md](SPEC_V1_ENVOY.md)** - Detailed envoy manager specification
+- **[SPEC_V1_SLEEVE.md](SPEC_V1_SLEEVE.md)** - Detailed sleeve container specification
+
+## Key Concepts
+
+### Memory vs Communication
+
+```
+CORTICAL STACK (.cstack/)     NEEDLECAST (/needlecast/)
+----------------------------  ----------------------------
+Memory - sleeve's own state   Communication - inter-sleeve
+
+CURRENT.md  - active task     INBOX.md   - messages TO sleeve
+PLAN.md     - backlog         OUTBOX.md  - messages FROM sleeve
+MEMORY.md   - learnings       arena/     - global broadcast
+
+"What I know"                 "What I say/hear"
+```
+
+**Important**: These are separate concerns in separate repos:
+- [cortical-stack](https://github.com/hotschmoe/cortical-stack) - Memory format
+- needlecast (future repo) - Communication protocol
+
+## Architecture
+
+```
+                    +------------------------+
+                    |        ENVOY           |
+                    |    (Manager Process)   |
+                    |  - CLI interface       |
+                    |  - HTTP API            |
+                    |  - Spawns sleeves      |
+                    |  - Routes messages     |
+                    |  - Health monitoring   |
+                    +----------+-------------+
+                               |
+         +---------------------+---------------------+
+         |                     |                     |
+         v                     v                     v
+  +---------------+     +---------------+     +---------------+
+  | Sleeve: alice |     | Sleeve: bob   |     | Sleeve: carol |
+  |               |     |               |     |               |
+  | +-----------+ |     | +-----------+ |     | +-----------+ |
+  | | sidecar   | |     | | sidecar   | |     | | sidecar   | |
+  | | :8080     | |     | | :8080     | |     | | :8080     | |
+  | +-----------+ |     | +-----------+ |     | +-----------+ |
+  | | tmux      | |     | | tmux      | |     | | tmux      | |
+  | | + claude  | |     | | + claude  | |     | | + claude  | |
+  | +-----------+ |     | +-----------+ |     | +-----------+ |
+  | | ttyd      | |     | | ttyd      | |     | | ttyd      | |
+  | | :7681     | |     | | :7681     | |     | | :7681     | |
+  | +-----------+ |     | +-----------+ |     | +-----------+ |
+  | .cstack/      |     | .cstack/      |     | .cstack/      |
+  +---------------+     +---------------+     +---------------+
+         |                     |                     |
+         +---------------------+---------------------+
+                               |
+                        /needlecast/
+                        (shared volume)
+```
+
 ## Repository Structure
 
 ```
 protectorate/
   cmd/
     envoy/           # Manager binary entry point
-    sidecar/         # Sidecar binary
+    sidecar/         # Sidecar binary entry point
   internal/
     envoy/           # Manager implementation
     sidecar/         # Sidecar implementation
@@ -41,41 +106,32 @@ Single container with two modes:
 |  | - Setup wizard    |   | - Route messages  |   |
 |  | - Create Gitea    |   | - Health checks   |   |
 |  | - Init config     |   | - API server      |   |
-|  | - Create networks |   | - UI server       |   |
+|  | - Create networks |   | - Web UI          |   |
 |  +-------------------+   +-------------------+   |
 +--------------------------------------------------+
 ```
 
 ### Sleeve Container
 
+V1 sleeve is Claude Code only (minimal image):
+
 ```dockerfile
 FROM debian:bookworm-slim
 
-# System dependencies
 RUN apt-get update && apt-get install -y \
-    curl git nodejs npm python3 python3-pip \
+    curl git ca-certificates tmux \
     && rm -rf /var/lib/apt/lists/*
 
-# Node.js (for AI CLI tools)
+# ttyd for web terminal
+RUN curl -fsSL https://github.com/tsl0922/ttyd/releases/download/1.7.4/ttyd.x86_64 \
+    -o /usr/local/bin/ttyd && chmod +x /usr/local/bin/ttyd
+
+# Node.js (for Claude Code)
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs
+    apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*
 
-# Bun
-RUN curl -fsSL https://bun.sh/install | bash
-ENV PATH="/root/.bun/bin:$PATH"
-
-# Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
-    sh -s -- -y --default-toolchain stable
-ENV PATH="/root/.cargo/bin:$PATH"
-
-# Zig
-RUN curl -fsSL https://ziglang.org/download/0.11.0/zig-linux-x86_64-0.11.0.tar.xz | \
-    tar -xJ -C /usr/local && \
-    ln -s /usr/local/zig-linux-x86_64-0.11.0/zig /usr/local/bin/zig
-
-# AI CLI tools
-RUN npm install -g @anthropic/claude-code
+# Claude Code CLI
+RUN npm install -g @anthropic-ai/claude-code
 
 # Sidecar binary
 COPY sidecar /usr/local/bin/sidecar
@@ -83,20 +139,24 @@ COPY sidecar /usr/local/bin/sidecar
 ENTRYPOINT ["/usr/local/bin/sidecar"]
 ```
 
-Image size: ~1.1GB (spawn time >> image size)
+Image size: ~400MB (V1 minimal)
 
-## API
+## API Summary
 
 ### Envoy Manager API (port 7470)
 
 ```
-GET  /health                 # Health check
-GET  /sleeves               # List all sleeves
-POST /sleeves               # Spawn new sleeve
-GET  /sleeves/{id}          # Get sleeve info
-DELETE /sleeves/{id}        # Kill sleeve
-POST /sleeves/{id}/resleeve # Resleeve (soft or hard)
-POST /docker/spawn          # Proxy Docker spawn for sleeves
+GET  /health                  # Health check
+GET  /sleeves                 # List all sleeves
+POST /sleeves                 # Spawn new sleeve
+GET  /sleeves/{name}          # Get sleeve info
+DELETE /sleeves/{name}        # Kill sleeve
+POST /sleeves/{name}/resleeve # Resleeve (soft or hard)
+POST /sleeves/{name}/message  # Send message to sleeve
+GET  /sleeves/{name}/terminal # WebSocket proxy to ttyd
+GET  /arena                   # Read global arena
+POST /arena                   # Post to global arena
+POST /docker/spawn            # Proxy Docker spawn for sleeves
 ```
 
 ### Sidecar API (port 8080)
@@ -108,32 +168,52 @@ GET  /outbox    # Read OUTBOX.md messages
 POST /resleeve  # Soft resleeve (CLI swap)
 ```
 
-## Message Routing
+## Message Routing (Needlecast)
 
 ```
-Sleeve A writes to OUTBOX.md
+Sleeve A writes to /needlecast/alice/OUTBOX.md
        |
        v
 Envoy reads all OUTBOX files on polling cycle
        |
        v
-Envoy routes message to Sleeve B's INBOX.md
+Envoy routes message to /needlecast/bob/INBOX.md
        |
        v
 Envoy clears processed messages from OUTBOX
        |
        v
 Sleeve B reads INBOX.md on next cycle
+
+GLOBAL ARENA:
+Any sleeve can write to /needlecast/arena/GLOBAL.md
+All sleeves can read it (broadcast messages)
 ```
 
 ## CLI Commands
 
 ```bash
-envoy spawn --repo foo --cli claude-code    # Spawn sleeve
-envoy status                                 # List sleeves
-envoy resleeve agent-alice --cli gemini     # Soft resleeve
-envoy resleeve agent-alice --hard           # Hard resleeve
-envoy kill agent-bob                         # Kill sleeve
+# Sleeve management
+envoy spawn --repo foo --goal "build feature"  # Spawn sleeve
+envoy status                                    # List sleeves
+envoy info alice                                # Sleeve details
+envoy kill alice                                # Kill sleeve
+envoy resleeve alice --soft                     # Restart CLI only
+envoy resleeve alice --hard                     # Recreate container
+envoy attach alice                              # Connect to terminal
+
+# Messaging
+envoy send alice "message"                      # Direct message
+envoy broadcast "announcement"                  # Global arena
+envoy inbox alice                               # Read inbox
+envoy outbox alice                              # Read outbox
+envoy arena                                     # Read global arena
+
+# System
+envoy init                                      # Bootstrap wizard
+envoy config show                               # Show config
+envoy gitea status                              # Gitea health
+envoy mirror run                                # Trigger GitHub sync
 ```
 
 ## Configuration
@@ -161,6 +241,10 @@ mirror:
   frequency: daily
   github_org: hotschmoe
   # token from env: ${GITHUB_TOKEN}
+
+needlecast:
+  root: /needlecast
+  arena_enabled: true
 ```
 
 ## V1 Scope
@@ -169,29 +253,31 @@ mirror:
 
 - [x] Envoy manager container (with bootstrap mode)
 - [x] Gitea container (spawned by envoy)
-- [x] Sleeve container (single image, all CLIs + languages)
+- [x] Sleeve container (Claude Code only)
+- [x] tmux session management in sleeves
+- [x] ttyd web terminal per sleeve
 - [x] Setup wizard (TUI in manager)
-- [x] INBOX/OUTBOX message routing
+- [x] Needlecast messaging (INBOX/OUTBOX)
+- [x] Global arena (shared broadcast)
 - [x] Sleeve spawning and lifecycle
 - [x] Sidecar health/status API
 - [x] Daily GitHub mirror (cron)
-- [x] Daily summary agent
-- [x] QMD search integration
-- [x] Minimal dashboard UI
-- [x] Soft resleeve (CLI swap)
+- [x] Minimal dashboard UI (terminal viewer, sleeve list)
+- [x] Soft resleeve (CLI swap via tmux)
 - [x] Hard resleeve (container respawn)
 - [x] Docker proxy for sleeve testing (via manager)
+- [x] CLI-first design (web UI uses CLI/API)
 
 ### Excluded (V2+)
 
+- [ ] Multi-CLI support (Gemini, OpenCode, etc.)
+- [ ] Extended runtime image (Rust, Zig, Bun, etc.)
 - [ ] Multi-machine (MASTER/SLAVE topology)
 - [ ] Traefik reverse proxy
-- [ ] Ralphing / agent loops
-- [ ] Shared arena messaging
+- [ ] Agent loops / autonomous operation
 - [ ] Messaging integration (Telegram/Slack)
 - [ ] Warm container pool
 - [ ] Sleeve deployment to production
-- [ ] Beads integration
 
 ## Policies
 
@@ -200,21 +286,38 @@ mirror:
 Strictly enforced - no concurrent access to same .cstack/ directory.
 
 If parallelism needed:
-1. Use subagents within the CLI harness (Claude Code supports this)
+1. Use subagents within Claude Code (native support)
 2. Use separate repos with separate sleeves
 
 ### Host Auth Inheritance
 
-AI CLI credentials inherited via volume mount:
+Claude Code credentials inherited via volume mount:
 
 ```bash
 docker run -it \
-  -v ~/.claude:/root/.claude \
+  -v ~/.claude/.credentials.json:/root/.claude/.credentials.json:ro \
   -v $(pwd):/workspace \
   protectorate-sleeve
 ```
 
 User authenticates on host once, all containers inherit.
+
+See [docs/claude-code-docker-inheritance.md](docs/claude-code-docker-inheritance.md) for details.
+
+### CLI-First Design
+
+Everything is automatable via CLI. Web UI is a frontend to the CLI/API.
+
+```
+USER (human or LLM)
+        |
+        v
+   ENVOY CLI  <----->  ENVOY API
+        |                  ^
+        v                  |
+   Web UI  ----------------+
+   (optional)
+```
 
 ## Sleeve Naming
 
@@ -244,17 +347,17 @@ Manager assigns next available name on spawn.
 
 ### Phase 3: Sleeve Lifecycle
 - Spawn API endpoint
-- Sidecar implementation
+- Sidecar implementation (with tmux/ttyd)
 - Polling loop and state tracking
 - Timeout handling
 
-### Phase 4: Communication and UI
+### Phase 4: Communication
+- Needlecast implementation
 - OUTBOX polling
 - INBOX writing
-- Dashboard UI
-- Manager chat interface
+- Global arena
 
-### Phase 5: Mirror and Summary
+### Phase 5: UI and Polish
+- Dashboard UI (sleeve list, terminal viewer)
+- ttyd proxy through envoy
 - GitHub mirror cron
-- Summary agent
-- QMD search integration

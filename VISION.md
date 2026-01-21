@@ -46,7 +46,8 @@ This protects us from upstream breaking changes, abandoned projects, API drift, 
 | Protectorate | The framework/system (this repo) |
 | Envoy | The manager process/CLI tool |
 | Sleeve | Agent container (the body) |
-| Cortical Stack | Agent memory format (.cstack/) |
+| Cortical Stack | Agent memory format (.cstack/) - what the sleeve knows |
+| Needlecast | Inter-sleeve communication (/needlecast/) - what sleeves say/hear |
 | DHF | The AI consciousness (Claude, Gemini, etc.) |
 | Resleeve | Switch CLI or respawn container |
 
@@ -76,8 +77,8 @@ This protects us from upstream breaking changes, abandoned projects, API drift, 
 **Envoy Manager**
 - Runs as a container with Docker socket access
 - Spawns and manages sleeve containers
-- Routes messages between sleeves via INBOX/OUTBOX
-- Provides API and TUI for human interaction
+- Routes messages between sleeves via needlecast (INBOX/OUTBOX)
+- Provides CLI and API for human/LLM interaction
 - Handles bootstrap (first-run setup) and normal operation
 
 **Sleeves**
