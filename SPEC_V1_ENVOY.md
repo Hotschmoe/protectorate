@@ -63,9 +63,9 @@ The steady-state operational mode. Runs continuously.
 ```
 MANAGER LOOP (every poll_interval):
 1. Health check all sleeves via sidecar /health
-2. Read all sleeve OUTBOX.md files
-3. Route messages to target INBOX.md files
-4. Clear processed OUTBOX messages
+2. Read all sleeve .needlecast/outbox.md files
+3. Route messages to target .needlecast/inbox.md files
+4. Clear processed outbox messages
 5. Update internal state
 6. Handle any pending API requests
 ```
@@ -114,11 +114,9 @@ envoy outbox <sleeve-name>
 # Read sleeve's inbox
 envoy inbox <sleeve-name>
 
-# Post to global arena
-envoy broadcast "message for all sleeves"
-
-# Read global arena
-envoy arena
+# V2: Arena commands (shelved)
+# envoy broadcast "message for all sleeves"
+# envoy arena
 ```
 
 ### System Operations
@@ -218,12 +216,9 @@ POST /sleeves/{name}/message
 GET /sleeves/{name}/outbox
   Response: {"messages": [...]}
 
-POST /arena
-  Body: {"content": "broadcast message"}
-  Response: {"status": "posted"}
-
-GET /arena
-  Response: {"messages": [...]}
+# V2: Arena endpoints (shelved)
+# POST /arena
+# GET /arena
 ```
 
 ### Terminal Proxy (ttyd)
@@ -296,9 +291,10 @@ mirror:
   # token from env: GITHUB_TOKEN
 
 # Needlecast (messaging)
+# Note: .needlecast/ is inside each workspace, not a separate volume
 needlecast:
-  root: /needlecast
-  arena_enabled: true
+  poll_interval: 30s  # How often to check outboxes
+  # V2: arena_enabled: true
 ```
 
 ### Environment Variables
@@ -386,7 +382,7 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /build/envoy /usr/local/bin/envoy
 
 # Create directories
-RUN mkdir -p /root/.envoy /needlecast /workspaces
+RUN mkdir -p /root/.envoy /workspaces
 
 EXPOSE 7470
 
@@ -410,8 +406,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ~/.envoy:/root/.envoy
       - ~/.claude/.credentials.json:/host-claude-creds/.credentials.json:ro
-      - ./workspaces:/workspaces
-      - needlecast:/needlecast
+      - ./workspaces:/workspaces  # Contains .cstack/ and .needlecast/ per project
     environment:
       - GITEA_PASSWORD=${GITEA_PASSWORD}
       - GITHUB_TOKEN=${GITHUB_TOKEN}
@@ -431,7 +426,6 @@ services:
       - cortical-net
 
 volumes:
-  needlecast:
   gitea-data:
 
 networks:
@@ -469,22 +463,24 @@ Envoy CLI: "Spawned sleeve 'alice' - working on foo"
 ### Sleeve -> Envoy (via Needlecast)
 
 ```
-Sleeve writes to /needlecast/alice/OUTBOX.md:
-  "TO: bob\nNeed help with database schema"
+Alice's sleeve writes to /workspace/.needlecast/outbox.md:
+  "---\nto: bob\n...\n---\nNeed help with database schema"
     |
     v
-Envoy poll loop reads OUTBOX
+Envoy poll loop reads outbox from /workspaces/alice-project/.needlecast/outbox.md
     |
     v
-Envoy writes to /needlecast/bob/INBOX.md:
-  "FROM: alice\nNeed help with database schema"
+Envoy writes to /workspaces/bob-project/.needlecast/inbox.md:
+  "---\nfrom: alice\n...\n---\nNeed help with database schema"
     |
     v
-Envoy clears /needlecast/alice/OUTBOX.md
+Envoy clears alice's outbox.md
     |
     v
-Bob's CLI reads INBOX on next cycle
+Bob's CLI reads inbox.md on next cycle
 ```
+
+**Note**: Each sleeve's `.needlecast/` is inside its workspace. Envoy has access to all workspaces. Sleeves only see their own workspace.
 
 ## Error Handling
 
@@ -518,14 +514,15 @@ if gitea /health fails:
 - [x] REST API
 - [x] Sleeve spawning/killing
 - [x] Soft and hard resleeve
-- [x] Needlecast message routing (INBOX/OUTBOX)
-- [x] Global arena
+- [x] Needlecast message routing (inbox/outbox, single file format)
 - [x] ttyd terminal proxy
 - [x] Docker proxy for sleeve container spawning
 - [x] Gitea spawning and management
 - [x] Basic web UI (terminal viewer, sleeve list)
 
 ### Excluded (V2+)
+- [ ] Global arena (broadcast messaging)
+- [ ] File-per-message needlecast format
 - [ ] Multi-node deployment
 - [ ] Traefik reverse proxy
 - [ ] Slack/Telegram notifications

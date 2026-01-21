@@ -16,16 +16,18 @@ V1 is single-machine deployment with core sleeve management, message routing, an
 ### Memory vs Communication
 
 ```
-CORTICAL STACK (.cstack/)     NEEDLECAST (/needlecast/)
+CORTICAL STACK (.cstack/)     NEEDLECAST (.needlecast/)
 ----------------------------  ----------------------------
 Memory - sleeve's own state   Communication - inter-sleeve
 
-CURRENT.md  - active task     INBOX.md   - messages TO sleeve
-PLAN.md     - backlog         OUTBOX.md  - messages FROM sleeve
-MEMORY.md   - learnings       arena/     - global broadcast
+CURRENT.md  - active task     inbox.md   - messages TO sleeve
+PLAN.md     - backlog         outbox.md  - messages FROM sleeve
+MEMORY.md   - learnings       (V2: arena.md - global broadcast)
 
 "What I know"                 "What I say/hear"
 ```
+
+Both `.cstack/` and `.needlecast/` live in the project workspace (git tracked).
 
 **Important**: These are separate concerns in separate repos:
 - [cortical-stack](https://github.com/hotschmoe/cortical-stack) - Memory format
@@ -170,25 +172,25 @@ POST /resleeve  # Soft resleeve (CLI swap)
 
 ## Message Routing (Needlecast)
 
-```
-Sleeve A writes to /needlecast/alice/OUTBOX.md
-       |
-       v
-Envoy reads all OUTBOX files on polling cycle
-       |
-       v
-Envoy routes message to /needlecast/bob/INBOX.md
-       |
-       v
-Envoy clears processed messages from OUTBOX
-       |
-       v
-Sleeve B reads INBOX.md on next cycle
+V1 uses single-file format. V2 may use file-per-message for atomicity.
 
-GLOBAL ARENA:
-Any sleeve can write to /needlecast/arena/GLOBAL.md
-All sleeves can read it (broadcast messages)
 ```
+Sleeve A writes to /workspace/.needlecast/outbox.md
+       |
+       v
+Envoy reads outbox.md from all workspaces on polling cycle
+       |
+       v
+Envoy routes message to Sleeve B's .needlecast/inbox.md
+       |
+       v
+Envoy clears processed messages from outbox.md
+       |
+       v
+Sleeve B reads inbox.md on next cycle
+```
+
+**V2**: Global arena for broadcast messaging (shelved for V1).
 
 ## CLI Commands
 
@@ -204,10 +206,10 @@ envoy attach alice                              # Connect to terminal
 
 # Messaging
 envoy send alice "message"                      # Direct message
-envoy broadcast "announcement"                  # Global arena
 envoy inbox alice                               # Read inbox
 envoy outbox alice                              # Read outbox
-envoy arena                                     # Read global arena
+# V2: envoy broadcast "announcement"            # Global arena
+# V2: envoy arena                               # Read global arena
 
 # System
 envoy init                                      # Bootstrap wizard
@@ -243,8 +245,8 @@ mirror:
   # token from env: ${GITHUB_TOKEN}
 
 needlecast:
-  root: /needlecast
-  arena_enabled: true
+  poll_interval: 30s  # How often to check outboxes
+  # Note: .needlecast/ is in each workspace, not a separate volume
 ```
 
 ## V1 Scope
@@ -257,8 +259,7 @@ needlecast:
 - [x] tmux session management in sleeves
 - [x] ttyd web terminal per sleeve
 - [x] Setup wizard (TUI in manager)
-- [x] Needlecast messaging (INBOX/OUTBOX)
-- [x] Global arena (shared broadcast)
+- [x] Needlecast messaging (inbox/outbox, single file format)
 - [x] Sleeve spawning and lifecycle
 - [x] Sidecar health/status API
 - [x] Daily GitHub mirror (cron)
@@ -270,6 +271,8 @@ needlecast:
 
 ### Excluded (V2+)
 
+- [ ] Global arena (broadcast messaging)
+- [ ] File-per-message needlecast format
 - [ ] Multi-CLI support (Gemini, OpenCode, etc.)
 - [ ] Extended runtime image (Rust, Zig, Bun, etc.)
 - [ ] Multi-machine (MASTER/SLAVE topology)

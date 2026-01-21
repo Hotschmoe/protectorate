@@ -246,7 +246,7 @@ RUN npm install -g @anthropic-ai/claude-code
 COPY sidecar /usr/local/bin/sidecar
 
 # Create necessary directories
-RUN mkdir -p /root/.claude /workspace /needlecast
+RUN mkdir -p /root/.claude /workspace
 
 # Working directory
 WORKDIR /workspace
@@ -286,9 +286,7 @@ V2 will include additional runtimes. For V1, we only support Claude Code:
 
 | Mount Point | Source | Mode | Purpose |
 |-------------|--------|------|---------|
-| `/workspace` | Host/Gitea repo | rw | Project code |
-| `/needlecast/{name}` | Shared volume | rw | INBOX.md, OUTBOX.md |
-| `/needlecast/arena` | Shared volume | rw | Global arena |
+| `/workspace` | Host/Gitea repo | rw | Project code (includes .cstack/, .needlecast/) |
 | `/root/.claude/.credentials.json` | Host | ro | Claude auth |
 
 ### Optional Mounts
@@ -296,7 +294,8 @@ V2 will include additional runtimes. For V1, we only support Claude Code:
 | Mount Point | Source | Mode | Purpose |
 |-------------|--------|------|---------|
 | `/root/.claude/plugins` | Host | ro | Host plugins |
-| `/workspace/.cstack` | Named volume | rw | Persist memory across hard resleeve |
+
+**Note**: `.cstack/` and `.needlecast/` are part of the project repo (git tracked), not separate mounts. They persist through hard resleeve because the workspace volume persists.
 
 ### Docker Run Example
 
@@ -305,12 +304,27 @@ docker run -d \
   --name sleeve-alice \
   --network cortical-net \
   -v /workspaces/myproject:/workspace \
-  -v needlecast:/needlecast \
   -v ~/.claude/.credentials.json:/root/.claude/.credentials.json:ro \
   -e SLEEVE_NAME=alice \
   -e SLEEVE_CLI=claude-code \
   -e SLEEVE_GOAL="Implement authentication module" \
   ghcr.io/hotschmoe/protectorate-sleeve:latest
+```
+
+### What's in the Workspace
+
+```
+/workspace/                      (mounted from host)
+  .cstack/                       # Memory - git tracked
+    CURRENT.md
+    PLAN.md
+    MEMORY.md
+  .needlecast/                   # Communication - git tracked
+    inbox.md
+    outbox.md
+  src/                           # Project code
+  CLAUDE.md                      # Project instructions
+  ...
 ```
 
 ## Cortical Stack (.cstack/)
@@ -360,87 +374,129 @@ The sidecar parses this file to report status to envoy.
 
 Needlecast is the inter-sleeve communication layer. Separate from cortical stack.
 
+**Location**: `/workspace/.needlecast/` (in project repo, git tracked)
+
+**V1 Format**: Single file with appended messages (V2 may use file-per-message)
+
 ### Directory Structure
 
 ```
-/needlecast/
-  alice/
-    INBOX.md      # Messages TO alice
-    OUTBOX.md     # Messages FROM alice
-  bob/
-    INBOX.md
-    OUTBOX.md
-  arena/
-    GLOBAL.md     # Broadcast messages for all sleeves
+/workspace/
+  .cstack/           # Memory (sleeve's own state)
+  .needlecast/       # Communication (inter-sleeve)
+    inbox.md         # Messages TO this sleeve
+    outbox.md        # Messages FROM this sleeve
+  src/               # Project code
 ```
 
-### INBOX.md Format
+**Note**: Arena is shelved for V1. Will be added in V2 as `.needlecast/arena.md` or shared mount.
+
+### Access Patterns
+
+```
+ENVOY can see:
+  - ALL sleeves' .cstack/
+  - ALL sleeves' .needlecast/
+
+SLEEVE can see:
+  - Own .cstack/
+  - Own .needlecast/
+  - (V2) Shared arena
+
+SLEEVE CANNOT see:
+  - Other sleeves' .cstack/
+  - Other sleeves' .needlecast/
+```
+
+### Message Format (YAML Frontmatter)
+
+Messages use YAML frontmatter for metadata, markdown for content:
 
 ```markdown
-# Inbox
-
-## Message [2026-01-21T10:00:00Z]
-FROM: bob
-THREAD: auth-help
-
+---
+id: msg-abc123
+from: bob
+to: alice
+thread: auth-help
+type: question
+time: 2026-01-21T10:00:00Z
+---
 Need help understanding the JWT implementation.
 Can you review my approach?
 
 ---
-
-## Message [2026-01-21T09:30:00Z]
-FROM: envoy
-THREAD: directive
-
+id: msg-abc124
+from: envoy
+to: alice
+type: directive
+time: 2026-01-21T09:30:00Z
+---
 Please prioritize the authentication module.
+
 ```
 
-### OUTBOX.md Format
+### inbox.md
+
+Messages TO this sleeve. Written by envoy, read by sleeve.
+
+### outbox.md
+
+Messages FROM this sleeve. Written by sleeve (or CLI), read and cleared by envoy.
 
 ```markdown
-# Outbox
-
-## Message [2026-01-21T10:15:00Z]
-TO: bob
-THREAD: auth-help
-
+---
+id: msg-def456
+from: alice
+to: bob
+thread: auth-help
+type: response
+time: 2026-01-21T10:15:00Z
+---
 Here's my review of your JWT approach:
 1. Token expiry looks good
 2. Consider adding refresh tokens
 3. The secret should come from env vars
 
 ---
-
-## Message [2026-01-21T10:10:00Z]
-TO: envoy
-TYPE: milestone
-
+id: msg-def457
+from: alice
+to: envoy
+type: milestone
+time: 2026-01-21T10:10:00Z
+---
 Completed user model implementation.
 Moving on to JWT tokens.
+
 ```
 
-### Global Arena
+### Message Types
 
-Broadcast messages visible to all sleeves:
+| Type | Purpose |
+|------|---------|
+| `task` | Assign work to a sleeve |
+| `question` | Ask another sleeve for help |
+| `response` | Reply to a question |
+| `milestone` | Report progress to envoy |
+| `directive` | Envoy command to sleeve |
+| `blocked` | Report blocker |
 
-```markdown
-# Global Arena
+### V2 Consideration: File-per-message
 
-## Message [2026-01-21T10:00:00Z]
-FROM: alice
-THREAD: announcement
+V2 may switch to file-per-message for better atomicity:
 
-Just pushed a breaking change to the auth module.
-All sleeves working on API endpoints should pull latest.
-
----
-
-## Message [2026-01-21T09:00:00Z]
-FROM: envoy
-TYPE: directive
-
-Daily standup: All sleeves report progress to envoy by noon.
 ```
+.needlecast/
+  inbox/
+    2026-01-21T10-00-00_msg-abc123.md
+    2026-01-21T10-05-00_msg-abc124.md
+  outbox/
+    2026-01-21T10-02-00_msg-def456.md
+  arena/
+    2026-01-21T09-00-00_msg-ghi789.md
+```
+
+Benefits: atomic writes, easier cleanup, cleaner git history.
+Deferred to V2 to reduce initial complexity.
 
 ## Environment Variables
 
@@ -569,6 +625,77 @@ resources:
 
 These are set by envoy when spawning via Docker API.
 
+## Go Package Structure
+
+The sidecar uses internal packages for parsing cstack and needlecast files:
+
+```
+protectorate/
+  internal/
+    cstack/
+      types.go      # CurrentState, PlanState, Task, SleeveStatus
+      parser.go     # ParseCurrent, ParsePlan, ExtractStatus
+    needlecast/
+      types.go      # Message
+      messages.go   # ReadInbox, ReadOutbox, WriteInbox, ClearOutbox
+```
+
+### internal/cstack
+
+```go
+package cstack
+
+const StackDir = ".cstack"
+
+type SleeveStatus string
+
+const (
+    StatusIdle    SleeveStatus = "idle"
+    StatusWorking SleeveStatus = "working"
+    StatusBlocked SleeveStatus = "blocked"
+    StatusDone    SleeveStatus = "done"
+)
+
+type CurrentState struct {
+    Status       SleeveStatus
+    Task         string
+    Progress     Progress
+    Blockers     []string
+    LastModified time.Time
+}
+
+type Progress struct {
+    Total     int
+    Completed int
+}
+
+func ParseCurrent(workspacePath string) (*CurrentState, error)
+func ExtractStatus(workspacePath string) (SleeveStatus, error)
+```
+
+### internal/needlecast
+
+```go
+package needlecast
+
+const NeedlecastDir = ".needlecast"
+
+type Message struct {
+    ID        string
+    From      string
+    To        string
+    Thread    string
+    Type      string
+    Content   string
+    Timestamp time.Time
+}
+
+func ReadInbox(workspacePath string) ([]Message, error)
+func ReadOutbox(workspacePath string) ([]Message, error)
+func WriteInbox(workspacePath string, msg Message) error
+func ClearOutbox(workspacePath string) error
+```
+
 ## V1 Scope
 
 ### Included
@@ -577,8 +704,7 @@ These are set by envoy when spawning via Docker API.
 - [x] ttyd web terminal
 - [x] Claude Code integration
 - [x] Credentials inheritance
-- [x] Needlecast INBOX/OUTBOX
-- [x] Global arena access
+- [x] Needlecast inbox/outbox (single file format)
 - [x] Cortical stack for memory
 
 ### Excluded (V2+)
@@ -586,4 +712,6 @@ These are set by envoy when spawning via Docker API.
 - [ ] Extended runtime image (Rust, Zig, etc.)
 - [ ] Warm container pool
 - [ ] GPU access
+- [ ] Global arena (broadcast messaging)
+- [ ] File-per-message needlecast format
 - [ ] Sleeve-to-sleeve direct communication (bypassing needlecast)
