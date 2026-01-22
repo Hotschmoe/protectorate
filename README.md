@@ -43,12 +43,24 @@ WE DO:     Orchestrate dozens of them with shared memory and coordination
 ## Quick Start
 
 ```bash
-# Build
-make build
+# 1. Build all Go binaries
+go build ./cmd/envoy
 
-# Run manager
-make up
+# 2. Build container images
+docker build -t protectorate-envoy:latest -f containers/envoy/Dockerfile .
+docker build -t protectorate-sleeve:latest -f containers/sleeve/Dockerfile containers/sleeve/
+
+# 3. Clean all containers, networks, volumes (dev machine only!)
+docker compose down -v
+docker stop $(docker ps -aq) 2>/dev/null; docker rm $(docker ps -aq) 2>/dev/null
+docker network prune -f
+docker volume prune -f
+
+# 4. Start envoy
+docker compose up
 ```
+
+**Web UI:** http://localhost:7470
 
 ## API
 
