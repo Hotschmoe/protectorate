@@ -8,7 +8,8 @@ services:
     environment:
       - WORKSPACE_HOST_ROOT=${PWD}/workspaces
       - CREDENTIALS_HOST_PATH=${HOME}/.claude/.credentials.json
-      - SETTINGS_HOST_PATH=${HOME}/.claude.json
+      - SETTINGS_HOST_PATH=${HOME}/.claude/settings.json
+      - PLUGINS_HOST_PATH=${HOME}/.claude/plugins
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ~/.claude/.credentials.json:/host-claude-creds/.credentials.json:ro

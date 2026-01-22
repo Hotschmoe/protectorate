@@ -6,6 +6,7 @@ docker:
   workspace_host_root: ${WORKSPACE_HOST_ROOT}
   credentials_host_path: ${CREDENTIALS_HOST_PATH}
   settings_host_path: ${SETTINGS_HOST_PATH}
+  plugins_host_path: ${PLUGINS_HOST_PATH}
   sleeve_image: protectorate-sleeve:latest
 
 poll_interval: 1h

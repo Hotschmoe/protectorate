@@ -27,6 +27,7 @@ type DockerConfig struct {
 	WorkspaceHostRoot   string `yaml:"workspace_host_root"`
 	CredentialsHostPath string `yaml:"credentials_host_path"`
 	SettingsHostPath    string `yaml:"settings_host_path"`
+	PluginsHostPath     string `yaml:"plugins_host_path"`
 	SleeveImage         string `yaml:"sleeve_image"`
 }
 
