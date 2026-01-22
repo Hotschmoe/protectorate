@@ -48,7 +48,7 @@ go build ./cmd/envoy
 
 # 2. Build container images
 docker build -t protectorate-envoy:latest -f containers/envoy/Dockerfile .
-docker build -t protectorate-sleeve:latest -f containers/sleeve/Dockerfile containers/sleeve/
+docker build -t protectorate-sleeve:latest -f containers/sleeve/Dockerfile .
 
 # 3. Clean all containers, networks, volumes (dev machine only!)
 docker compose down -v
