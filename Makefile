@@ -1,4 +1,4 @@
-.PHONY: build build-base build-sleeve build-envoy clean help
+.PHONY: build build-base build-sleeve build-envoy up down clean clean-all help
 
 # Default target
 build: build-envoy build-sleeve
@@ -37,6 +37,24 @@ up:
 down:
 	docker compose down
 
+# Remove all protectorate containers and networks
+clean:
+	@echo "Stopping and removing all sleeve containers..."
+	@docker ps -aq --filter "name=sleeve-" | xargs -r docker rm -f 2>/dev/null || true
+	@echo "Stopping envoy..."
+	@docker compose down 2>/dev/null || true
+	@echo "Removing raven network..."
+	@docker network rm raven 2>/dev/null || true
+	@echo "Clean complete."
+
+# Nuclear option: clean + remove all protectorate images
+clean-all: clean
+	@echo "Removing protectorate images..."
+	@docker rmi protectorate/sleeve:latest 2>/dev/null || true
+	@docker rmi protectorate/sleeve-base:latest 2>/dev/null || true
+	@docker rmi protectorate/envoy:latest 2>/dev/null || true
+	@echo "Clean-all complete."
+
 # Show build times
 time-base:
 	time $(MAKE) build-base
@@ -55,3 +73,5 @@ help:
 	@echo ""
 	@echo "  make up           Start services via docker-compose"
 	@echo "  make down         Stop services"
+	@echo "  make clean        Remove all containers and networks"
+	@echo "  make clean-all    Remove containers, networks, and images"
