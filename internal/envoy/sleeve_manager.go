@@ -135,7 +135,7 @@ func (m *SleeveManager) Spawn(req SpawnSleeveRequest) (*SleeveInfo, error) {
 		mounts = append(mounts, mount.Mount{
 			Type:     mount.TypeBind,
 			Source:   m.cfg.Docker.CredentialsHostPath,
-			Target:   "/root/.claude/.credentials.json",
+			Target:   "/home/claude/.claude/.credentials.json",
 			ReadOnly: true,
 		})
 	}
@@ -144,7 +144,7 @@ func (m *SleeveManager) Spawn(req SpawnSleeveRequest) (*SleeveInfo, error) {
 		mounts = append(mounts, mount.Mount{
 			Type:     mount.TypeBind,
 			Source:   m.cfg.Docker.SettingsHostPath,
-			Target:   "/root/.claude.json",
+			Target:   "/home/claude/.claude.json",
 			ReadOnly: true,
 		})
 	}

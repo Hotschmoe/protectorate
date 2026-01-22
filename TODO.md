@@ -1,32 +1,8 @@
 # TODO - Next Session
 
-## Claude Root User Issue
+## V0.1 Complete
 
-**Problem**: `--dangerously-skip-permissions` cannot be used with root/sudo privileges for security reasons.
-
-```
-root@6817665a2de8:/workspace# cd /workspace && claude --dangerously-skip-permissions
---dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons
-```
-
-**Current State**:
-- Sleeve containers run as root
-- Claude Code refuses `--dangerously-skip-permissions` when running as root
-- Without this flag, the workspace trust dialog blocks auto-launch
-
-**Potential Solutions**:
-1. Create a non-root user in the sleeve container and run Claude as that user
-2. Pre-accept workspace trust via mounted config (if possible)
-3. Use a different flag combination that works with root
-4. Investigate if there's a way to disable the root check
-
-**Files to Modify**:
-- `containers/sleeve/Dockerfile` - Add non-root user
-- `containers/sleeve/entrypoint.sh` - Switch to non-root user before launching Claude
-
-## V0.1 Status
-
-Working:
+All V0.1 functionality is now working:
 - Envoy web UI on :7470
 - Docker containers/networks overview
 - Claude auth indicator (green/red)
@@ -34,6 +10,15 @@ Working:
 - WebSocket terminal proxy to ttyd (fixed protocol encoding)
 - Workspace management (create/select)
 - Settings inheritance from host (~/.claude.json mounted)
+- Auto-launch Claude (fixed by running as non-root user)
 
-Not Working:
-- Auto-launch Claude (blocked by root user + permissions issue above)
+## Root User Issue - RESOLVED
+
+**Solution**: Created non-root `claude` user (UID 1000) in sleeve container.
+
+**Changes made**:
+- `containers/sleeve/Dockerfile` - Added `claude` user with home directory
+- `containers/sleeve/entrypoint.sh` - Runs tmux/claude as `claude` user via `su`
+- `internal/envoy/sleeve_manager.go` - Updated mount targets to `/home/claude/`
+
+Claude now launches with `--dangerously-skip-permissions` successfully since it runs as a regular user.
