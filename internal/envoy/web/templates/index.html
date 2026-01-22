@@ -536,13 +536,7 @@
 
         function sendResize(cols, rows) {
             if (currentWs && currentWs.readyState === WebSocket.OPEN) {
-                const resizeMsg = JSON.stringify({columns: cols, rows: rows});
-                const msg = new Uint8Array(resizeMsg.length + 1);
-                msg[0] = 0x31;
-                for (let i = 0; i < resizeMsg.length; i++) {
-                    msg[i + 1] = resizeMsg.charCodeAt(i);
-                }
-                currentWs.send(msg);
+                currentWs.send('1' + JSON.stringify({columns: cols, rows: rows}));
             }
         }
 
@@ -576,9 +570,15 @@
             };
 
             currentWs.onmessage = (event) => {
-                const data = new Uint8Array(event.data);
-                if (data.length > 0 && data[0] === 0x30) {
-                    currentTerm.write(data.slice(1));
+                if (typeof event.data === 'string') {
+                    if (event.data.length > 0 && event.data[0] === '0') {
+                        currentTerm.write(event.data.slice(1));
+                    }
+                } else {
+                    const data = new Uint8Array(event.data);
+                    if (data.length > 0 && data[0] === 0x30) {
+                        currentTerm.write(data.slice(1));
+                    }
                 }
             };
 
@@ -592,12 +592,7 @@
 
             currentTerm.onData((data) => {
                 if (currentWs && currentWs.readyState === WebSocket.OPEN) {
-                    const msg = new Uint8Array(data.length + 1);
-                    msg[0] = 0x30;
-                    for (let i = 0; i < data.length; i++) {
-                        msg[i + 1] = data.charCodeAt(i);
-                    }
-                    currentWs.send(msg);
+                    currentWs.send('0' + data);
                 }
             });
 
