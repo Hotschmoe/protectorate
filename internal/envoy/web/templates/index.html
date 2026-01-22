@@ -536,7 +536,7 @@
 
         function sendResize(cols, rows) {
             if (currentWs && currentWs.readyState === WebSocket.OPEN) {
-                // ttyd protocol: RESIZE = '1' (ASCII 49), followed by JSON
+                // Protocol: RESIZE = '1' (ASCII 49), followed by JSON
                 const json = JSON.stringify({columns: cols, rows: rows});
                 const msg = new Uint8Array(json.length + 1);
                 msg[0] = 49;  // ASCII '1' for resize
@@ -573,20 +573,14 @@
             currentWs.binaryType = 'arraybuffer';
 
             currentWs.onopen = () => {
-                // ttyd protocol requires JSON_DATA handshake first
-                // The '{' character serves as the command identifier
-                const initData = JSON.stringify({
-                    AuthToken: "",
-                    columns: currentTerm.cols,
-                    rows: currentTerm.rows
-                });
-                currentWs.send(initData);
+                // Send initial resize
+                sendResize(currentTerm.cols, currentTerm.rows);
             };
 
             currentWs.onmessage = (event) => {
                 const data = new Uint8Array(event.data);
-                if (data.length > 0 && data[0] === 48) {
-                    currentTerm.write(data.slice(1));
+                if (data.length > 0) {
+                    currentTerm.write(data);
                 }
             };
 
@@ -600,7 +594,7 @@
 
             currentTerm.onData((data) => {
                 if (currentWs && currentWs.readyState === WebSocket.OPEN) {
-                    // ttyd protocol: INPUT = '0' (ASCII 48), followed by data
+                    // Protocol: INPUT = '0' (ASCII 48), followed by data
                     const msg = new Uint8Array(data.length + 1);
                     msg[0] = 48;  // ASCII '0' for input
                     for (let i = 0; i < data.length; i++) {

@@ -3,13 +3,11 @@ set -e
 
 TMUX_SESSION="main"
 
+# Create session if it doesn't exist
 tmux new-session -d -s "$TMUX_SESSION"
 
-# Start with shell - auto-launch blocked by root user restriction
-# TODO: Create non-root user to enable --dangerously-skip-permissions
+# Start with shell
 tmux send-keys -t "$TMUX_SESSION" "cd /workspace && echo 'Type: claude'" Enter
 
-exec ttyd \
-    --port 7681 \
-    --writable \
-    tmux attach-session -t "$TMUX_SESSION"
+# Start sleeve-agent
+exec sleeve-agent --addr :7681
