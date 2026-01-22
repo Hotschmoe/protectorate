@@ -7,6 +7,12 @@ TMUX_SESSION="main"
 chown -R claude:claude /workspace
 chown -R claude:claude /home/claude/.claude 2>/dev/null || true
 
+# Copy read-only mounted settings to writable location
+if [ -f /etc/claude/settings.json ]; then
+    cp /etc/claude/settings.json /home/claude/.claude.json
+    chown claude:claude /home/claude/.claude.json
+fi
+
 # Start tmux session as claude user
 su - claude -c "tmux new-session -d -s $TMUX_SESSION"
 

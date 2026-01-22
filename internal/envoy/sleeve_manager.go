@@ -144,7 +144,7 @@ func (m *SleeveManager) Spawn(req SpawnSleeveRequest) (*SleeveInfo, error) {
 		mounts = append(mounts, mount.Mount{
 			Type:     mount.TypeBind,
 			Source:   m.cfg.Docker.SettingsHostPath,
-			Target:   "/home/claude/.claude.json",
+			Target:   "/etc/claude/settings.json",
 			ReadOnly: true,
 		})
 	}

@@ -22,7 +22,7 @@ RUN wget -q "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/t
     && chmod +x /usr/local/bin/ttyd
 
 RUN useradd -m -s /bin/bash -u 1000 claude \
-    && mkdir -p /home/claude/.claude /workspace \
+    && mkdir -p /home/claude/.claude /workspace /etc/claude \
     && chown -R claude:claude /home/claude /workspace
 
 COPY entrypoint.sh /entrypoint.sh
