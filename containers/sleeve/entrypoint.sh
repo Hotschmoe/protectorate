@@ -5,7 +5,9 @@ TMUX_SESSION="main"
 
 tmux new-session -d -s "$TMUX_SESSION"
 
-tmux send-keys -t "$TMUX_SESSION" "claude --resume" Enter
+# Start with shell prompt - user can launch claude manually
+# This avoids the interactive setup wizard prompts
+tmux send-keys -t "$TMUX_SESSION" "cd /workspace && echo 'Sleeve ready. Type: claude --resume'" Enter
 
 exec ttyd \
     --port 7681 \
