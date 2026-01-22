@@ -534,6 +534,18 @@
             }
         }
 
+        function sendResize(cols, rows) {
+            if (currentWs && currentWs.readyState === WebSocket.OPEN) {
+                const resizeMsg = JSON.stringify({columns: cols, rows: rows});
+                const msg = new Uint8Array(resizeMsg.length + 1);
+                msg[0] = 1;
+                for (let i = 0; i < resizeMsg.length; i++) {
+                    msg[i + 1] = resizeMsg.charCodeAt(i);
+                }
+                currentWs.send(msg);
+            }
+        }
+
         function openTerminal(name) {
             document.getElementById('terminal-title').textContent = `Terminal - ${name}`;
             document.getElementById('terminal-modal').classList.add('active');
@@ -560,12 +572,12 @@
             currentWs.binaryType = 'arraybuffer';
 
             currentWs.onopen = () => {
-                currentTerm.write('Connected to sleeve...\r\n');
+                sendResize(currentTerm.cols, currentTerm.rows);
             };
 
             currentWs.onmessage = (event) => {
                 const data = new Uint8Array(event.data);
-                if (data.length > 0 && data[0] === 0x31) {
+                if (data.length > 0 && data[0] === 0) {
                     currentTerm.write(data.slice(1));
                 }
             };
@@ -581,7 +593,7 @@
             currentTerm.onData((data) => {
                 if (currentWs && currentWs.readyState === WebSocket.OPEN) {
                     const msg = new Uint8Array(data.length + 1);
-                    msg[0] = 0x30;
+                    msg[0] = 0;
                     for (let i = 0; i < data.length; i++) {
                         msg[i + 1] = data.charCodeAt(i);
                     }
@@ -589,7 +601,10 @@
                 }
             });
 
-            window.addEventListener('resize', () => fitAddon.fit());
+            window.addEventListener('resize', () => {
+                fitAddon.fit();
+                sendResize(currentTerm.cols, currentTerm.rows);
+            });
         }
 
         function hideTerminalModal() {
