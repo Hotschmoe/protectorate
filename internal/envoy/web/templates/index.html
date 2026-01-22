@@ -567,7 +567,7 @@
             fitAddon.fit();
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            currentWs = new WebSocket(`${protocol}//${window.location.host}/sleeves/${name}/terminal`);
+            currentWs = new WebSocket(`${protocol}//${window.location.host}/sleeves/${name}/terminal`, ['tty']);
 
             currentWs.binaryType = 'arraybuffer';
 

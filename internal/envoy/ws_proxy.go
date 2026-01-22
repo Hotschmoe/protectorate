@@ -14,6 +14,7 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
+	Subprotocols: []string{"tty"},
 }
 
 func (s *Server) proxyWebSocket(w http.ResponseWriter, r *http.Request, targetAddr string) {
@@ -30,12 +31,18 @@ func (s *Server) proxyWebSocket(w http.ResponseWriter, r *http.Request, targetAd
 		Path:   "/ws",
 	}
 
-	targetConn, _, err := websocket.DefaultDialer.Dial(targetURL.String(), nil)
+	dialer := websocket.Dialer{
+		Subprotocols: []string{"tty"},
+	}
+
+	targetConn, _, err := dialer.Dial(targetURL.String(), nil)
 	if err != nil {
 		log.Printf("failed to connect to ttyd at %s: %v", targetURL.String(), err)
 		return
 	}
 	defer targetConn.Close()
+
+	log.Printf("proxy connected: client <-> %s", targetAddr)
 
 	errCh := make(chan error, 2)
 
@@ -67,5 +74,6 @@ func (s *Server) proxyWebSocket(w http.ResponseWriter, r *http.Request, targetAd
 		}
 	}()
 
-	<-errCh
+	err = <-errCh
+	log.Printf("proxy disconnected: %v", err)
 }
