@@ -1,6 +1,6 @@
-.PHONY: build build-base build-sleeve build-envoy up down clean clean-all help
+.PHONY: build build-base build-sleeve build-envoy build-envoy-release up down clean clean-all help
 
-# Default target
+# Default target (dev build)
 build: build-envoy build-sleeve
 
 # Build the shared base image (slow, run once)
@@ -19,8 +19,21 @@ build-sleeve:
 		-f containers/sleeve/Dockerfile \
 		containers/sleeve/
 
-# Build the envoy image (uses base for runtime)
-build-envoy:
+# Build envoy for dev (fast: local Go build + copy binary)
+build-envoy: bin/envoy
+	DOCKER_BUILDKIT=1 docker build \
+		--provenance=false \
+		-t protectorate/envoy:latest \
+		-f containers/envoy/Dockerfile.dev \
+		.
+
+# Build Go binary locally
+bin/envoy: $(shell find . -name '*.go' -type f)
+	@mkdir -p bin
+	CGO_ENABLED=0 GOOS=linux go build -o bin/envoy ./cmd/envoy
+
+# Build envoy for release (slow: multi-stage, self-contained)
+build-envoy-release:
 	DOCKER_BUILDKIT=1 docker build \
 		--provenance=false \
 		-t protectorate/envoy:latest \
@@ -28,7 +41,7 @@ build-envoy:
 		.
 
 # Build everything including base (for CI or fresh setup)
-build-all: build-base build
+build-all: build-base build-envoy-release build-sleeve
 
 # Run docker-compose
 up:
@@ -68,13 +81,14 @@ time-envoy:
 help:
 	@echo "Protectorate Build Targets"
 	@echo ""
-	@echo "  make build-base   Build shared base image (slow, ~2 min, run once)"
-	@echo "  make build-sleeve Build sleeve image (fast, ~3 sec)"
-	@echo "  make build-envoy  Build envoy image (fast, ~10 sec)"
-	@echo "  make build        Build envoy + sleeve (requires base exists)"
-	@echo "  make build-all    Build everything including base"
+	@echo "  make build-base          Build shared base image (slow, ~2 min, run once)"
+	@echo "  make build-sleeve        Build sleeve image (fast, ~3 sec)"
+	@echo "  make build-envoy         Build envoy for dev (fast, ~3 sec, local Go)"
+	@echo "  make build-envoy-release Build envoy for release (slow, multi-stage)"
+	@echo "  make build               Build envoy + sleeve for dev"
+	@echo "  make build-all           Build everything for release (includes base)"
 	@echo ""
-	@echo "  make up           Start services via docker-compose"
-	@echo "  make down         Stop services"
-	@echo "  make clean        Remove all containers and networks"
-	@echo "  make clean-all    Remove containers, networks, and images"
+	@echo "  make up                  Start services via docker-compose"
+	@echo "  make down                Stop services"
+	@echo "  make clean               Remove all containers and networks"
+	@echo "  make clean-all           Remove containers, networks, and images"
