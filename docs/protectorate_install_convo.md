@@ -594,6 +594,30 @@ Options:
 
 ---
 
+## Installer UX Research
+
+**TODO:** Research these installers for clean, polished terminal UI:
+
+| Project | Install Command | Notes |
+|---------|-----------------|-------|
+| Pi-hole | `curl -sSL https://install.pi-hole.net \| bash` | Clean whiptail/dialog TUI, progress bars, color output |
+| Clawdbot | TBD | Research what tools/libraries they use |
+
+**Questions to answer:**
+- What TUI library do they use? (whiptail, dialog, gum, charm?)
+- How do they handle multi-step progress?
+- How do they validate input?
+- How do they handle errors gracefully?
+
+**Potential tools:**
+- `whiptail` - Simple TUI dialogs (comes with most distros)
+- `dialog` - More features than whiptail
+- `gum` - Modern, Go-based TUI (https://github.com/charmbracelet/gum)
+- `charm` - Full TUI framework from same team
+- Pure bash with ANSI colors - Simpler, no dependencies
+
+---
+
 ## Security Considerations
 
 1. **Piping to bash:** Standard practice but users should review script first
