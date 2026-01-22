@@ -181,6 +181,8 @@ See: [cortical-stack](https://github.com/hotschmoe/cortical-stack) for the memor
 | Needlecast | Inter-sleeve communication (/needlecast/) - what sleeves say/hear |
 | DHF | The AI consciousness (Claude Code, Gemini CLI, etc.) |
 | Resleeve | Switch CLI (soft) or respawn container (hard) |
+| Poe | Orchestration agent that coordinates sleeves (future: task routing, delegation) |
+| Raven | Docker network connecting envoy and sleeves |
 
 ---
 
