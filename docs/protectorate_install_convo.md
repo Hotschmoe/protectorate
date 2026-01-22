@@ -1,0 +1,485 @@
+# Protectorate Installation Design
+
+This document explores a one-line installer for Protectorate.
+
+---
+
+## Goal
+
+```bash
+curl -fsSL https://protectorate.dev/install.sh | bash
+```
+
+User runs one command, answers prompts, and ends up with:
+- Docker installed (if needed)
+- Protectorate repo cloned
+- Claude Code authenticated with long-lived token
+- Envoy container running
+- Ready to spawn sleeves
+
+---
+
+## Installation Flow
+
+```
++------------------+
+| Check Docker     |
+| installed?       |
++--------+---------+
+         |
+    No   |   Yes
+    v    |    |
++--------+    |
+| Install     |
+| Docker      |
++--------+----+
+         |
+         v
++------------------+
+| Check Claude CLI |
+| installed?       |
++--------+---------+
+         |
+    No   |   Yes
+    v    |    |
++--------+    |
+| Install     |
+| Claude CLI  |
++--------+----+
+         |
+         v
++------------------+
+| Check Claude     |
+| authenticated?   |
++--------+---------+
+         |
+    No   |   Yes
+    v    |    |
++--------+    |
+| Run claude  |
+| login flow  |
++--------+----+
+         |
+         v
++------------------+
+| Generate long-   |
+| lived token      |
+| (setup-token)    |
++--------+---------+
+         |
+         v
++------------------+
+| Clone/update     |
+| Protectorate     |
++--------+---------+
+         |
+         v
++------------------+
+| Create .env      |
+| with token       |
++--------+---------+
+         |
+         v
++------------------+
+| Build images     |
+| (make build)     |
++--------+---------+
+         |
+         v
++------------------+
+| Start Envoy      |
+| (make up)        |
++------------------+
+         |
+         v
+    [Ready!]
+```
+
+---
+
+## Dependency Checks
+
+### Docker
+
+```bash
+check_docker() {
+    if ! command -v docker &> /dev/null; then
+        echo "Docker not found. Installing..."
+        # Detect OS and install appropriately
+        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            curl -fsSL https://get.docker.com | sh
+            sudo usermod -aG docker $USER
+            echo "NOTE: You may need to log out and back in for docker group"
+        elif [[ "$OSTYPE" == "darwin"* ]]; then
+            echo "Please install Docker Desktop from https://docker.com/products/docker-desktop"
+            exit 1
+        fi
+    fi
+
+    # Verify docker works
+    if ! docker info &> /dev/null; then
+        echo "Docker installed but not running. Please start Docker."
+        exit 1
+    fi
+}
+```
+
+### Claude CLI
+
+```bash
+check_claude() {
+    if ! command -v claude &> /dev/null; then
+        echo "Claude Code not found. Installing..."
+        curl -fsSL https://claude.ai/install.sh | bash
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+
+    # Verify claude works
+    if ! claude --version &> /dev/null; then
+        echo "Claude CLI installed but not in PATH"
+        exit 1
+    fi
+}
+```
+
+---
+
+## Authentication Flow
+
+### Check Existing Auth
+
+```bash
+check_claude_auth() {
+    # Check if credentials file exists and has valid-looking token
+    CREDS_FILE="$HOME/.claude/.credentials.json"
+    if [[ -f "$CREDS_FILE" ]]; then
+        if grep -q "accessToken" "$CREDS_FILE"; then
+            echo "Found existing Claude credentials"
+            return 0
+        fi
+    fi
+    return 1
+}
+```
+
+### Interactive Login (if needed)
+
+```bash
+claude_login() {
+    echo ""
+    echo "=== Claude Authentication ==="
+    echo "You need to log in to Claude Code."
+    echo "This will open a browser window."
+    echo ""
+    read -p "Press Enter to continue..."
+
+    claude auth login
+
+    if ! check_claude_auth; then
+        echo "Authentication failed. Please try again."
+        exit 1
+    fi
+}
+```
+
+### Generate Long-Lived Token
+
+```bash
+generate_token() {
+    echo ""
+    echo "=== Generating Long-Lived Token ==="
+    echo "This creates a 1-year token for container authentication."
+    echo "You'll need to authorize in your browser."
+    echo ""
+    read -p "Press Enter to continue..."
+
+    # Run setup-token and capture output
+    TOKEN_OUTPUT=$(claude setup-token 2>&1)
+
+    # Extract token from output
+    # Expected format: "Your OAuth token (valid for 1 year): sk-ant-oat01-..."
+    TOKEN=$(echo "$TOKEN_OUTPUT" | grep -oP 'sk-ant-oat01-[A-Za-z0-9_-]+')
+
+    if [[ -z "$TOKEN" ]]; then
+        echo "Failed to extract token. Output was:"
+        echo "$TOKEN_OUTPUT"
+        echo ""
+        echo "You can manually run 'claude setup-token' and add to .env"
+        return 1
+    fi
+
+    echo "Token generated successfully!"
+    echo "$TOKEN"
+}
+```
+
+---
+
+## Environment Configuration
+
+### Create .env File
+
+```bash
+create_env() {
+    local TOKEN="$1"
+    local ENV_FILE="$PROTECTORATE_DIR/.env"
+
+    if [[ -f "$ENV_FILE" ]]; then
+        echo "Existing .env found. Backing up to .env.backup"
+        cp "$ENV_FILE" "$ENV_FILE.backup"
+    fi
+
+    cat > "$ENV_FILE" << EOF
+# Protectorate Configuration
+# Generated by install.sh on $(date)
+
+# Claude Authentication (long-lived token, valid 1 year)
+CLAUDE_CODE_OAUTH_TOKEN=$TOKEN
+
+# Host paths for credential fallback (optional)
+# HOME is auto-expanded at runtime
+CREDENTIALS_HOST_PATH=\${HOME}/.claude/.credentials.json
+SETTINGS_HOST_PATH=\${HOME}/.claude.json
+
+# Docker settings
+COMPOSE_PROJECT_NAME=protectorate
+EOF
+
+    echo "Created $ENV_FILE"
+}
+```
+
+### Prompt for Optional Variables
+
+```bash
+prompt_optional_vars() {
+    echo ""
+    echo "=== Optional Configuration ==="
+    echo ""
+
+    # Anthropic API Key (for direct API access, separate from Claude subscription)
+    read -p "Anthropic API Key (optional, press Enter to skip): " ANTHROPIC_KEY
+    if [[ -n "$ANTHROPIC_KEY" ]]; then
+        echo "ANTHROPIC_API_KEY=$ANTHROPIC_KEY" >> "$ENV_FILE"
+    fi
+
+    # OpenAI API Key (for future multi-model support)
+    read -p "OpenAI API Key (optional, press Enter to skip): " OPENAI_KEY
+    if [[ -n "$OPENAI_KEY" ]]; then
+        echo "OPENAI_API_KEY=$OPENAI_KEY" >> "$ENV_FILE"
+    fi
+
+    # Google AI Key (for Gemini CLI support)
+    read -p "Google AI API Key (optional, press Enter to skip): " GOOGLE_KEY
+    if [[ -n "$GOOGLE_KEY" ]]; then
+        echo "GOOGLE_AI_API_KEY=$GOOGLE_KEY" >> "$ENV_FILE"
+    fi
+}
+```
+
+---
+
+## Repo Setup
+
+### Clone or Update
+
+```bash
+setup_repo() {
+    PROTECTORATE_DIR="$HOME/protectorate"
+    REPO_URL="https://github.com/hotschmoe/protectorate.git"
+
+    if [[ -d "$PROTECTORATE_DIR" ]]; then
+        echo "Protectorate directory exists. Updating..."
+        cd "$PROTECTORATE_DIR"
+        git pull origin master
+    else
+        echo "Cloning Protectorate..."
+        git clone "$REPO_URL" "$PROTECTORATE_DIR"
+        cd "$PROTECTORATE_DIR"
+    fi
+}
+```
+
+---
+
+## Build and Launch
+
+### Build Images
+
+```bash
+build_images() {
+    echo ""
+    echo "=== Building Container Images ==="
+    echo "This may take a few minutes on first run..."
+    echo ""
+
+    cd "$PROTECTORATE_DIR"
+
+    # Build base image if needed
+    if ! docker images | grep -q "protectorate-sleeve-base"; then
+        echo "Building base image (slow, one-time)..."
+        make build-base
+    fi
+
+    # Build main images
+    make build
+}
+```
+
+### Start Envoy
+
+```bash
+start_envoy() {
+    echo ""
+    echo "=== Starting Envoy ==="
+    echo ""
+
+    cd "$PROTECTORATE_DIR"
+    make up
+
+    # Wait for health check
+    echo "Waiting for Envoy to be ready..."
+    for i in {1..30}; do
+        if curl -s http://localhost:7470/health > /dev/null 2>&1; then
+            echo "Envoy is running!"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "Envoy didn't start in time. Check logs with: docker logs protectorate-envoy"
+    return 1
+}
+```
+
+---
+
+## Complete Install Script Skeleton
+
+```bash
+#!/usr/bin/env bash
+set -e
+
+PROTECTORATE_VERSION="0.1.0"
+
+echo "========================================"
+echo "  Protectorate Installer v$PROTECTORATE_VERSION"
+echo "========================================"
+echo ""
+
+# 1. Check/install Docker
+check_docker
+
+# 2. Check/install Claude CLI
+check_claude
+
+# 3. Check/perform Claude authentication
+if ! check_claude_auth; then
+    claude_login
+fi
+
+# 4. Generate long-lived token
+TOKEN=$(generate_token)
+if [[ -z "$TOKEN" ]]; then
+    echo "Continuing without long-lived token (will use mounted credentials)"
+    TOKEN=""
+fi
+
+# 5. Clone/update repo
+setup_repo
+
+# 6. Create .env file
+create_env "$TOKEN"
+
+# 7. Prompt for optional API keys
+prompt_optional_vars
+
+# 8. Build images
+build_images
+
+# 9. Start Envoy
+start_envoy
+
+echo ""
+echo "========================================"
+echo "  Protectorate is ready!"
+echo "========================================"
+echo ""
+echo "Envoy API: http://localhost:7470"
+echo "Logs:      docker logs -f protectorate-envoy"
+echo "Stop:      cd ~/protectorate && make down"
+echo ""
+echo "Next steps:"
+echo "  - Spawn a sleeve: curl -X POST http://localhost:7470/api/sleeves/spawn"
+echo "  - View status:    curl http://localhost:7470/api/sleeves"
+echo ""
+```
+
+---
+
+## Hosting the Installer
+
+Options:
+
+1. **GitHub raw:** `curl -fsSL https://raw.githubusercontent.com/hotschmoe/protectorate/master/install.sh | bash`
+
+2. **Custom domain:** `curl -fsSL https://protectorate.dev/install.sh | bash`
+   - Requires DNS + hosting
+   - Shorter, memorable
+   - Can track installs
+
+3. **GitHub releases:** Versioned installers attached to releases
+
+---
+
+## Security Considerations
+
+1. **Piping to bash:** Standard practice but users should review script first
+   - Offer: `curl -fsSL ... | less` to review before running
+
+2. **Token storage:** `.env` file contains sensitive token
+   - Should be in `.gitignore` (already is)
+   - Warn user not to commit
+
+3. **Docker group:** Adding user to docker group is a security tradeoff
+   - Equivalent to root access
+   - Alternative: rootless docker (more complex)
+
+---
+
+## Open Questions
+
+1. **Install location:** `~/protectorate` or `/opt/protectorate` or configurable?
+
+2. **Systemd service:** Should we install a systemd unit for auto-start?
+
+3. **Update mechanism:** How do users update Protectorate?
+   - Re-run installer?
+   - `protectorate update` command?
+   - Auto-update check?
+
+4. **Uninstall:** Should we provide an uninstall script?
+
+5. **Multi-machine:** How to handle installing on multiple machines?
+   - Same token can be used (it's tied to account, not machine)
+   - Should we document this?
+
+6. **Windows/WSL:** Support WSL2? Native Windows?
+
+---
+
+## MVP Scope
+
+For first version, focus on:
+
+- [x] Linux support (Ubuntu/Debian primary)
+- [x] Docker installation
+- [x] Claude CLI installation
+- [x] Long-lived token generation
+- [x] .env creation
+- [x] Image build
+- [x] Envoy launch
+- [ ] macOS support (later - Docker Desktop complexity)
+- [ ] Windows/WSL support (later)
+- [ ] Systemd integration (later)
+- [ ] Auto-updates (later)
