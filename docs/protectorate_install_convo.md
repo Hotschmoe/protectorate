@@ -279,6 +279,158 @@ prompt_optional_vars() {
 
 ---
 
+## Claude Code Configuration
+
+Claude Code has several extension points. Some come with the repo, others need setup.
+
+### What Comes With the Repo (Project-Level)
+
+These live in `.claude/` directory and are available automatically after clone:
+
+```
+.claude/
+  agents/           # Custom agents for Task tool
+    build-verifier.md
+    coder-sonnet.md
+    gemini-analyzer.md
+  skills/           # Slash commands (/docker, /test, /verify)
+    docker.md
+    test.md
+    verify.md
+  settings.local.json  # Project-specific permissions
+```
+
+**No install action needed** - these work as soon as repo is cloned.
+
+### What Needs Setup (User-Level)
+
+These live in `~/.claude/` and may need configuration:
+
+| Component | Location | Install Action |
+|-----------|----------|----------------|
+| Credentials | `~/.claude/.credentials.json` | Handled by auth flow |
+| User settings | `~/.claude.json` | Set `hasCompletedOnboarding: true` |
+| Plugins | `~/.claude/plugins/` | Optional: install via `claude plugin` |
+| Hooks | `~/.claude/hooks/` or project `.claude/hooks/` | Optional: copy templates |
+
+### Plugins
+
+Plugins extend Claude Code's capabilities. For Protectorate, potentially useful:
+
+```bash
+# Install plugins (optional step in installer)
+setup_plugins() {
+    echo ""
+    echo "=== Installing Recommended Plugins ==="
+
+    # Example: code-simplifier for cleaner output
+    claude plugin install code-simplifier --marketplace claude-plugins-official || true
+
+    # Future: protectorate-specific plugins
+    # claude plugin install protectorate-tools --marketplace protectorate || true
+}
+```
+
+### Hooks
+
+Hooks run shell commands on Claude Code events. Useful for Protectorate coordination:
+
+```
+~/.claude/hooks/
+  pre-tool-use.sh    # Before any tool runs
+  post-tool-use.sh   # After any tool completes
+  on-error.sh        # On tool errors
+```
+
+**Potential Protectorate hooks:**
+- Notify Envoy when sleeve starts/stops tasks
+- Log tool usage for coordination
+- Sync state to .cstack files
+
+```bash
+setup_hooks() {
+    HOOKS_DIR="$HOME/.claude/hooks"
+    mkdir -p "$HOOKS_DIR"
+
+    # Copy hook templates from repo
+    if [[ -d "$PROTECTORATE_DIR/templates/hooks" ]]; then
+        cp "$PROTECTORATE_DIR/templates/hooks/"* "$HOOKS_DIR/"
+        chmod +x "$HOOKS_DIR/"*.sh
+    fi
+}
+```
+
+### Commands (Custom Slash Commands)
+
+Beyond skills (which are project-level), users can define global commands:
+
+```
+~/.claude/commands/
+  my-command.md
+```
+
+For Protectorate, we might want global commands like:
+- `/sleeve-status` - Check all sleeves from any project
+- `/needlecast` - Send message to another sleeve
+
+### Onboarding Flag
+
+Critical for non-interactive use (containers, CI):
+
+```bash
+setup_onboarding() {
+    CLAUDE_JSON="$HOME/.claude.json"
+
+    if [[ -f "$CLAUDE_JSON" ]]; then
+        # Add hasCompletedOnboarding if not present
+        if ! grep -q "hasCompletedOnboarding" "$CLAUDE_JSON"; then
+            # Use jq if available, otherwise sed
+            if command -v jq &> /dev/null; then
+                jq '.hasCompletedOnboarding = true' "$CLAUDE_JSON" > "$CLAUDE_JSON.tmp"
+                mv "$CLAUDE_JSON.tmp" "$CLAUDE_JSON"
+            else
+                # Fallback: insert before closing brace
+                sed -i 's/}$/,"hasCompletedOnboarding":true}/' "$CLAUDE_JSON"
+            fi
+        fi
+    else
+        # Create minimal config
+        echo '{"hasCompletedOnboarding":true}' > "$CLAUDE_JSON"
+    fi
+}
+```
+
+### Updated Install Flow
+
+```
+...
+Clone/update Protectorate
+     |
+     v
++------------------+
+| Setup onboarding |
+| flag             |
++--------+---------+
+     |
+     v
++------------------+
+| Install plugins  |
+| (optional)       |
++--------+---------+
+     |
+     v
++------------------+
+| Setup hooks      |
+| (optional)       |
++--------+---------+
+     |
+     v
+Create .env with token
+...
+```
+
+---
+
 ## Repo Setup
 
 ### Clone or Update
@@ -388,16 +540,21 @@ fi
 # 5. Clone/update repo
 setup_repo
 
-# 6. Create .env file
+# 6. Setup Claude Code configuration
+setup_onboarding    # Set hasCompletedOnboarding flag
+setup_plugins       # Install recommended plugins (optional)
+setup_hooks         # Copy hook templates (optional)
+
+# 7. Create .env file
 create_env "$TOKEN"
 
-# 7. Prompt for optional API keys
+# 8. Prompt for optional API keys
 prompt_optional_vars
 
-# 8. Build images
+# 9. Build images
 build_images
 
-# 9. Start Envoy
+# 10. Start Envoy
 start_envoy
 
 echo ""
@@ -408,6 +565,11 @@ echo ""
 echo "Envoy API: http://localhost:7470"
 echo "Logs:      docker logs -f protectorate-envoy"
 echo "Stop:      cd ~/protectorate && make down"
+echo ""
+echo "Claude Code configuration:"
+echo "  - Agents:  .claude/agents/ (build-verifier, coder-sonnet, gemini-analyzer)"
+echo "  - Skills:  .claude/skills/ (/docker, /test, /verify)"
+echo "  - Hooks:   ~/.claude/hooks/ (if installed)"
 echo ""
 echo "Next steps:"
 echo "  - Spawn a sleeve: curl -X POST http://localhost:7470/api/sleeves/spawn"
@@ -472,6 +634,7 @@ Options:
 
 For first version, focus on:
 
+**Core Install:**
 - [x] Linux support (Ubuntu/Debian primary)
 - [x] Docker installation
 - [x] Claude CLI installation
@@ -479,7 +642,42 @@ For first version, focus on:
 - [x] .env creation
 - [x] Image build
 - [x] Envoy launch
-- [ ] macOS support (later - Docker Desktop complexity)
-- [ ] Windows/WSL support (later)
-- [ ] Systemd integration (later)
-- [ ] Auto-updates (later)
+
+**Claude Code Config:**
+- [x] Onboarding flag setup (hasCompletedOnboarding)
+- [x] Project agents come with repo (.claude/agents/)
+- [x] Project skills come with repo (.claude/skills/)
+- [ ] Optional plugin installation
+- [ ] Optional hooks setup
+- [ ] Hook templates in repo (templates/hooks/)
+
+**Later:**
+- [ ] macOS support (Docker Desktop complexity)
+- [ ] Windows/WSL support
+- [ ] Systemd integration
+- [ ] Auto-updates
+- [ ] Global commands (~/.claude/commands/)
+- [ ] Plugin marketplace for Protectorate-specific tools
+
+---
+
+## Files to Create
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `install.sh` | Main installer script | TODO |
+| `templates/hooks/pre-tool-use.sh` | Hook template for Envoy notification | TODO |
+| `templates/hooks/post-tool-use.sh` | Hook template for state sync | TODO |
+| `.claude/commands/` | Global commands (if needed) | MAYBE |
+
+## Files Already in Repo
+
+| File | Purpose |
+|------|---------|
+| `.claude/agents/*.md` | Custom agents (build-verifier, coder-sonnet, gemini-analyzer) |
+| `.claude/skills/*.md` | Slash commands (/docker, /test, /verify) |
+| `.claude/settings.local.json` | Project permissions |
+| `docker-compose.yaml` | Container orchestration |
+| `configs/envoy.yaml` | Envoy configuration |
+| `.env.example` | Template for .env |
+| `Makefile` | Build commands |
