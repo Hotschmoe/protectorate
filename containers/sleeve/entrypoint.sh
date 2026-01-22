@@ -5,10 +5,9 @@ TMUX_SESSION="main"
 
 tmux new-session -d -s "$TMUX_SESSION"
 
-# Auto-launch claude in workspace with permissions bypassed
-# --dangerously-skip-permissions skips workspace trust dialog (safe in sandboxed container)
-# Settings inherited from host via mounted ~/.claude.json skip setup wizard
-tmux send-keys -t "$TMUX_SESSION" "cd /workspace && claude --dangerously-skip-permissions" Enter
+# Start with shell - auto-launch blocked by root user restriction
+# TODO: Create non-root user to enable --dangerously-skip-permissions
+tmux send-keys -t "$TMUX_SESSION" "cd /workspace && echo 'Type: claude'" Enter
 
 exec ttyd \
     --port 7681 \
