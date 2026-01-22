@@ -3,13 +3,13 @@
 # Default target
 build: build-envoy build-sleeve
 
-# Build the sleeve base image (slow, run once)
+# Build the shared base image (slow, run once)
 build-base:
 	DOCKER_BUILDKIT=1 docker build \
 		--provenance=false \
-		-t protectorate/sleeve-base:latest \
-		-f containers/sleeve-base/Dockerfile \
-		containers/sleeve-base/
+		-t protectorate/base:latest \
+		-f containers/base/Dockerfile \
+		containers/base/
 
 # Build the sleeve image (fast, uses base)
 build-sleeve:
@@ -19,7 +19,7 @@ build-sleeve:
 		-f containers/sleeve/Dockerfile \
 		containers/sleeve/
 
-# Build the envoy image
+# Build the envoy image (uses base for runtime)
 build-envoy:
 	DOCKER_BUILDKIT=1 docker build \
 		--provenance=false \
@@ -51,7 +51,7 @@ clean:
 clean-all: clean
 	@echo "Removing protectorate images..."
 	@docker rmi protectorate/sleeve:latest 2>/dev/null || true
-	@docker rmi protectorate/sleeve-base:latest 2>/dev/null || true
+	@docker rmi protectorate/base:latest 2>/dev/null || true
 	@docker rmi protectorate/envoy:latest 2>/dev/null || true
 	@echo "Clean-all complete."
 
@@ -62,12 +62,15 @@ time-base:
 time-sleeve:
 	time $(MAKE) build-sleeve
 
+time-envoy:
+	time $(MAKE) build-envoy
+
 help:
 	@echo "Protectorate Build Targets"
 	@echo ""
-	@echo "  make build-base   Build sleeve-base image (slow, ~2 min, run once)"
+	@echo "  make build-base   Build shared base image (slow, ~2 min, run once)"
 	@echo "  make build-sleeve Build sleeve image (fast, ~3 sec)"
-	@echo "  make build-envoy  Build envoy image (fast, ~5 sec)"
+	@echo "  make build-envoy  Build envoy image (fast, ~10 sec)"
 	@echo "  make build        Build envoy + sleeve (requires base exists)"
 	@echo "  make build-all    Build everything including base"
 	@echo ""
