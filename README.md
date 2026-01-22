@@ -4,6 +4,15 @@ Container-native AI agent orchestration system written in Go.
 
 Named after the interstellar governing body in Altered Carbon: containers are "sleeves" (bodies), AI tools are the consciousness, and Protectorate manages them all.
 
+## TLDR
+
+Protectorate spawns a manager container called **Envoy** that orchestrates AI agent containers called **Sleeves**. Each sleeve runs an AI CLI (Claude, Gemini, Codex, etc.) to work on tasks. Sleeves operate in workspaces where:
+
+- **Cortical Stack** (`.cstack/`) - Long-term memory that persists across sessions
+- **Needlecast** (`/needlecast/`) - Inter-agent communication system
+
+When an agent gets stuck or needs a different approach, Envoy can **resleeve** the container to a different AI (swap Gemini for Claude) while keeping the cortical stack intact - memories and task context persist across the transition.
+
 ## Philosophy
 
 ```
