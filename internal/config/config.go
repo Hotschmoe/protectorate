@@ -22,9 +22,11 @@ type EnvoyConfig struct {
 
 // DockerConfig defines Docker-specific configuration.
 type DockerConfig struct {
-	Network       string `yaml:"network"`
-	WorkspaceRoot string `yaml:"workspace_root"`
-	SleeveImage   string `yaml:"sleeve_image"`
+	Network             string `yaml:"network"`
+	WorkspaceRoot       string `yaml:"workspace_root"`
+	WorkspaceHostRoot   string `yaml:"workspace_host_root"`
+	CredentialsHostPath string `yaml:"credentials_host_path"`
+	SleeveImage         string `yaml:"sleeve_image"`
 }
 
 // GiteaConfig defines Gitea configuration.
@@ -100,9 +102,11 @@ func LoadEnvoyConfig(path string) (*EnvoyConfig, error) {
 		MaxSleeves:    10,
 		Port:          7470,
 		Docker: DockerConfig{
-			Network:       "cortical-net",
-			WorkspaceRoot: "/workspaces",
-			SleeveImage:   "ghcr.io/hotschmoe/protectorate-sleeve:latest",
+			Network:             "cortical-net",
+			WorkspaceRoot:       "/workspaces",
+			WorkspaceHostRoot:   "/workspaces",
+			CredentialsHostPath: "",
+			SleeveImage:         "ghcr.io/hotschmoe/protectorate-sleeve:latest",
 		},
 		Gitea: GiteaConfig{
 			URL: "http://gitea:3000",

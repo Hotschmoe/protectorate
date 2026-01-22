@@ -2,6 +2,7 @@ package envoy
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -81,6 +82,15 @@ func (m *SleeveManager) allocatePort() int {
 	return port
 }
 
+func (m *SleeveManager) toHostPath(containerPath string) string {
+	wsRoot := m.cfg.Docker.WorkspaceRoot
+	wsHostRoot := m.cfg.Docker.WorkspaceHostRoot
+	if wsRoot != "" && wsHostRoot != "" && strings.HasPrefix(containerPath, wsRoot) {
+		return wsHostRoot + strings.TrimPrefix(containerPath, wsRoot)
+	}
+	return containerPath
+}
+
 func (m *SleeveManager) Spawn(req SpawnSleeveRequest) (*SleeveInfo, error) {
 	name := req.Name
 	if name == "" {
@@ -110,21 +120,28 @@ func (m *SleeveManager) Spawn(req SpawnSleeveRequest) (*SleeveInfo, error) {
 		},
 	}
 
-	hostCfg := &container.HostConfig{
-		Mounts: []mount.Mount{
-			{
-				Type:     mount.TypeBind,
-				Source:   req.Workspace,
-				Target:   "/workspace",
-				ReadOnly: false,
-			},
-			{
-				Type:     mount.TypeBind,
-				Source:   "/host-claude-creds/.credentials.json",
-				Target:   "/root/.claude/.credentials.json",
-				ReadOnly: true,
-			},
+	workspaceHostPath := m.toHostPath(req.Workspace)
+
+	mounts := []mount.Mount{
+		{
+			Type:     mount.TypeBind,
+			Source:   workspaceHostPath,
+			Target:   "/workspace",
+			ReadOnly: false,
 		},
+	}
+
+	if m.cfg.Docker.CredentialsHostPath != "" {
+		mounts = append(mounts, mount.Mount{
+			Type:     mount.TypeBind,
+			Source:   m.cfg.Docker.CredentialsHostPath,
+			Target:   "/root/.claude/.credentials.json",
+			ReadOnly: true,
+		})
+	}
+
+	hostCfg := &container.HostConfig{
+		Mounts: mounts,
 	}
 
 	netCfg := &network.NetworkingConfig{

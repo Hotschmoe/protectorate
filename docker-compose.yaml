@@ -5,6 +5,9 @@ services:
       dockerfile: containers/envoy/Dockerfile
     ports:
       - "7470:7470"
+    environment:
+      - WORKSPACE_HOST_ROOT=${PWD}/workspaces
+      - CREDENTIALS_HOST_PATH=${HOME}/.claude/.credentials.json
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ~/.claude/.credentials.json:/host-claude-creds/.credentials.json:ro
