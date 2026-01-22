@@ -4,8 +4,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 )
+
+type WorkspaceInfo struct {
+	Name       string `json:"name"`
+	Path       string `json:"path"`
+	InUse      bool   `json:"in_use"`
+	SleeveName string `json:"sleeve_name,omitempty"`
+}
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -137,4 +145,91 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write(html)
+}
+
+func (s *Server) handleWorkspaces(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		workspaces, err := s.listWorkspaces()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(workspaces)
+
+	case http.MethodPost:
+		var req struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		if req.Name == "" {
+			http.Error(w, "workspace name required", http.StatusBadRequest)
+			return
+		}
+
+		if strings.ContainsAny(req.Name, "/\\..") {
+			http.Error(w, "invalid workspace name", http.StatusBadRequest)
+			return
+		}
+
+		wsPath := filepath.Join(s.cfg.Docker.WorkspaceRoot, req.Name)
+		if err := os.MkdirAll(wsPath, 0755); err != nil {
+			http.Error(w, "failed to create workspace: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(WorkspaceInfo{
+			Name:  req.Name,
+			Path:  wsPath,
+			InUse: false,
+		})
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) listWorkspaces() ([]WorkspaceInfo, error) {
+	wsRoot := s.cfg.Docker.WorkspaceRoot
+
+	if err := os.MkdirAll(wsRoot, 0755); err != nil {
+		return nil, err
+	}
+
+	entries, err := os.ReadDir(wsRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	sleeves := s.sleeves.List()
+	wsToSleeve := make(map[string]string)
+	for _, sl := range sleeves {
+		wsToSleeve[sl.Workspace] = sl.Name
+	}
+
+	workspaces := make([]WorkspaceInfo, 0)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		wsPath := filepath.Join(wsRoot, entry.Name())
+		sleeveName := wsToSleeve[wsPath]
+
+		workspaces = append(workspaces, WorkspaceInfo{
+			Name:       entry.Name(),
+			Path:       wsPath,
+			InUse:      sleeveName != "",
+			SleeveName: sleeveName,
+		})
+	}
+
+	return workspaces, nil
 }

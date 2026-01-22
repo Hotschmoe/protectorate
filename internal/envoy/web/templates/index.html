@@ -177,6 +177,35 @@
             padding: 2rem;
             color: #8b949e;
         }
+        .radio-group {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+        }
+        .radio-option input { cursor: pointer; }
+        .form-select {
+            width: 100%;
+            padding: 0.5rem;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #c9d1d9;
+        }
+        .form-select option { background: #0d1117; }
+        .form-select option:disabled { color: #6e7681; }
+        .hidden { display: none; }
+        .ws-status {
+            font-size: 0.75rem;
+            color: #8b949e;
+            margin-left: 0.5rem;
+        }
+        .ws-status.in-use { color: #f85149; }
     </style>
 </head>
 <body>
@@ -244,12 +273,32 @@
             <h2 class="modal-title">Spawn New Sleeve</h2>
             <form id="spawn-form" onsubmit="spawnSleeve(event)">
                 <div class="form-group">
-                    <label class="form-label">Workspace Path</label>
-                    <input type="text" class="form-input" id="workspace-input"
-                           placeholder="/workspaces/myproject" required>
+                    <label class="form-label">Workspace</label>
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="ws-mode" value="new" checked onchange="toggleWorkspaceMode()">
+                            Create new
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="ws-mode" value="existing" onchange="toggleWorkspaceMode()">
+                            Use existing
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group" id="new-ws-group">
+                    <label class="form-label">Workspace Name</label>
+                    <input type="text" class="form-input" id="new-workspace-input"
+                           placeholder="my-project" pattern="[a-zA-Z0-9_-]+"
+                           title="Letters, numbers, dashes, underscores only">
+                </div>
+                <div class="form-group hidden" id="existing-ws-group">
+                    <label class="form-label">Select Workspace</label>
+                    <select class="form-select" id="existing-workspace-select">
+                        <option value="">Loading...</option>
+                    </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Name (optional)</label>
+                    <label class="form-label">Sleeve Name (optional)</label>
                     <input type="text" class="form-input" id="name-input"
                            placeholder="Auto-assigned from pool">
                 </div>
@@ -355,21 +404,96 @@
             }
         }
 
-        function showSpawnModal() {
+        let workspacesCache = [];
+
+        async function refreshWorkspaces() {
+            try {
+                const resp = await fetch('/api/workspaces');
+                workspacesCache = await resp.json();
+                updateWorkspaceSelect();
+            } catch (e) {
+                console.error('Failed to fetch workspaces:', e);
+            }
+        }
+
+        function updateWorkspaceSelect() {
+            const select = document.getElementById('existing-workspace-select');
+            if (workspacesCache.length === 0) {
+                select.innerHTML = '<option value="">No workspaces available</option>';
+                return;
+            }
+            select.innerHTML = workspacesCache.map(ws => {
+                const disabled = ws.in_use ? 'disabled' : '';
+                const status = ws.in_use ? ` (in use by ${ws.sleeve_name})` : '';
+                return `<option value="${ws.path}" ${disabled}>${ws.name}${status}</option>`;
+            }).join('');
+        }
+
+        function toggleWorkspaceMode() {
+            const mode = document.querySelector('input[name="ws-mode"]:checked').value;
+            const newGroup = document.getElementById('new-ws-group');
+            const existingGroup = document.getElementById('existing-ws-group');
+            const newInput = document.getElementById('new-workspace-input');
+            const existingSelect = document.getElementById('existing-workspace-select');
+
+            if (mode === 'new') {
+                newGroup.classList.remove('hidden');
+                existingGroup.classList.add('hidden');
+                newInput.required = true;
+                existingSelect.required = false;
+            } else {
+                newGroup.classList.add('hidden');
+                existingGroup.classList.remove('hidden');
+                newInput.required = false;
+                existingSelect.required = true;
+            }
+        }
+
+        async function showSpawnModal() {
+            await refreshWorkspaces();
+            toggleWorkspaceMode();
             document.getElementById('spawn-modal').classList.add('active');
         }
 
         function hideSpawnModal() {
             document.getElementById('spawn-modal').classList.remove('active');
             document.getElementById('spawn-form').reset();
+            toggleWorkspaceMode();
         }
 
         async function spawnSleeve(e) {
             e.preventDefault();
-            const workspace = document.getElementById('workspace-input').value;
+            const mode = document.querySelector('input[name="ws-mode"]:checked').value;
             const name = document.getElementById('name-input').value;
+            let workspace;
 
             try {
+                if (mode === 'new') {
+                    const wsName = document.getElementById('new-workspace-input').value;
+                    if (!wsName) {
+                        alert('Please enter a workspace name');
+                        return;
+                    }
+                    const createResp = await fetch('/api/workspaces', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: wsName })
+                    });
+                    if (!createResp.ok) {
+                        const err = await createResp.text();
+                        alert('Failed to create workspace: ' + err);
+                        return;
+                    }
+                    const wsData = await createResp.json();
+                    workspace = wsData.path;
+                } else {
+                    workspace = document.getElementById('existing-workspace-select').value;
+                    if (!workspace) {
+                        alert('Please select a workspace');
+                        return;
+                    }
+                }
+
                 const resp = await fetch('/api/sleeves', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
