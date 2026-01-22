@@ -50,10 +50,13 @@ func (s *Server) proxyWebSocket(w http.ResponseWriter, r *http.Request, targetAd
 		for {
 			msgType, msg, err := clientConn.ReadMessage()
 			if err != nil {
+				log.Printf("client read error: %v", err)
 				errCh <- err
 				return
 			}
+			log.Printf("client -> ttyd: type=%d len=%d first=%v", msgType, len(msg), msg[:min(10, len(msg))])
 			if err := targetConn.WriteMessage(msgType, msg); err != nil {
+				log.Printf("ttyd write error: %v", err)
 				errCh <- err
 				return
 			}
@@ -64,10 +67,13 @@ func (s *Server) proxyWebSocket(w http.ResponseWriter, r *http.Request, targetAd
 		for {
 			msgType, msg, err := targetConn.ReadMessage()
 			if err != nil {
+				log.Printf("ttyd read error: %v", err)
 				errCh <- err
 				return
 			}
+			log.Printf("ttyd -> client: type=%d len=%d first=%v", msgType, len(msg), msg[:min(10, len(msg))])
 			if err := clientConn.WriteMessage(msgType, msg); err != nil {
+				log.Printf("client write error: %v", err)
 				errCh <- err
 				return
 			}
