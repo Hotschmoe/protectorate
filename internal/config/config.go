@@ -26,6 +26,7 @@ type DockerConfig struct {
 	WorkspaceRoot       string `yaml:"workspace_root"`
 	WorkspaceHostRoot   string `yaml:"workspace_host_root"`
 	CredentialsHostPath string `yaml:"credentials_host_path"`
+	SettingsHostPath    string `yaml:"settings_host_path"`
 	SleeveImage         string `yaml:"sleeve_image"`
 }
 
@@ -106,6 +107,7 @@ func LoadEnvoyConfig(path string) (*EnvoyConfig, error) {
 			WorkspaceRoot:       "/workspaces",
 			WorkspaceHostRoot:   "/workspaces",
 			CredentialsHostPath: "",
+			SettingsHostPath:    "",
 			SleeveImage:         "ghcr.io/hotschmoe/protectorate-sleeve:latest",
 		},
 		Gitea: GiteaConfig{

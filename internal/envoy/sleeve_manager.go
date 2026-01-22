@@ -140,6 +140,15 @@ func (m *SleeveManager) Spawn(req SpawnSleeveRequest) (*SleeveInfo, error) {
 		})
 	}
 
+	if m.cfg.Docker.SettingsHostPath != "" {
+		mounts = append(mounts, mount.Mount{
+			Type:     mount.TypeBind,
+			Source:   m.cfg.Docker.SettingsHostPath,
+			Target:   "/root/.claude.json",
+			ReadOnly: true,
+		})
+	}
+
 	hostCfg := &container.HostConfig{
 		Mounts: mounts,
 	}
