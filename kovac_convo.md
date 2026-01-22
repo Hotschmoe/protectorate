@@ -122,3 +122,131 @@ beads_rust is designed for human developers. Sleeves need:
 - Hypothesis field as first-class citizen
 
 The core storage model (SQLite + JSONL + content hashing) is solid. Fork to adapt the interface and add sleeve-specific conventions.
+
+---
+
+## beads_viewer as Analysis Layer
+
+Evaluated https://github.com/Dicklesworthstone/beads_viewer as companion to beads_rust.
+
+### What It Is
+
+A TUI (terminal UI) written in Go that provides read-only analysis of beads data. While `br` handles CRUD, `bv` handles intelligence:
+
+```
+beads_rust (br)    - WRITE: create, update, close issues
+beads_viewer (bv)  - READ: analyze, search, plan, triage
+```
+
+### Robot Protocol (Agent-First Design)
+
+All `--robot-*` commands output deterministic JSON for agent consumption:
+
+| Command | Purpose |
+|---------|---------|
+| `--robot-triage` | Combined analysis: quick wins, blockers, recommendations with reasoning |
+| `--robot-plan` | Parallel work tracks respecting dependencies |
+| `--robot-insights` | All 9 graph metrics as JSON |
+| `--robot-search` | Semantic vector search results |
+| `--robot-history` | Bead-to-commit correlations with confidence scores |
+| `--robot-file-beads <path>` | Find all beads touching specific files |
+
+### Graph Intelligence
+
+Computes 9 metrics automatically:
+1. **PageRank** - Recursive dependency importance
+2. **Betweenness Centrality** - Bottleneck detection
+3. **HITS (Hubs/Authorities)** - Distinguishes epics from utilities
+4. **Critical Path** - Longest dependency chain, zero-slack keystones
+5. **Eigenvector Centrality** - Influence via connected neighbors
+6. **Degree Centrality** - Connection counts
+7. **Density** - Edge-to-node ratio (project coupling)
+8. **Cycle Detection** - Circular dependency errors
+9. **Topological Sort** - Valid execution order
+
+### How It Fills Kovac's Gaps
+
+| Gap | beads_viewer Solution |
+|-----|----------------------|
+| Search/discovery of past decisions | `--robot-search` semantic search |
+| Hypothesis preservation | History View correlates beads to commits |
+| Pattern recognition | 9 graph metrics computed automatically |
+| "What should I work on next?" | `--robot-triage` returns prioritized recommendations |
+| Dependency visualization | `--robot-plan` generates parallel execution tracks |
+| Bottleneck detection | Betweenness centrality identifies blocking issues |
+
+### Sleeve Workflow with Both Tools
+
+```
+Boot:    bv --robot-triage     # Get prioritized work
+Work:    br update/close       # Modify state
+Stuck:   bv --robot-insights   # Find bottlenecks
+Search:  bv --robot-search     # Discover past decisions
+Handoff: bv --robot-history    # Correlate decisions with commits
+```
+
+---
+
+## Unified Fork: cortical-stack
+
+Rather than running two separate tools, fork both into a single unified CLI for sleeves.
+
+### Merge Strategy
+
+```
+cortical-stack (cs)
+  |
+  +-- From beads_rust (Rust)
+  |     - SQLite + JSONL storage model
+  |     - Issue schema (simplified for sleeves)
+  |     - CRUD operations
+  |     - Dependency tracking
+  |
+  +-- From beads_viewer (Go)
+  |     - Graph intelligence (PageRank, betweenness, etc.)
+  |     - Robot protocol (JSON output)
+  |     - Semantic search
+  |     - History correlation
+  |
+  +-- New for Sleeves
+        - hypothesis field (first-class)
+        - resleeve hooks (auto-capture before swap)
+        - sidecar integration (error capture)
+        - simplified command set (sleeves don't need 40+ commands)
+```
+
+### Language Decision
+
+Two options:
+1. **Rust** - Rewrite viewer features in Rust, single binary
+2. **Go** - Rewrite storage in Go, single binary
+
+Go may be pragmatic: Protectorate is already Go, and viewer's graph algorithms are already implemented.
+
+### Proposed Commands
+
+```
+cs init                    # Initialize .cstack/
+cs task create "title"     # Create task
+cs task close <id>         # Close with reason
+cs task hypothesis <id>    # Record "about to try X"
+cs triage                  # What should I work on? (JSON)
+cs insights                # Graph metrics (JSON)
+cs search "query"          # Semantic search (JSON)
+cs history                 # Bead-to-commit correlation (JSON)
+cs handoff                 # Pre-resleeve state dump
+cs boot                    # Post-resleeve briefing
+```
+
+### .cstack Structure (Revised)
+
+```
+.cstack/
+  stack.db            # SQLite - tasks, hypotheses, history
+  stack.jsonl         # Git-sync format
+  config.yaml         # Sleeve-specific defaults
+  .history/           # Timestamped backups
+  MEMORY.md           # Long-form prose context (optional)
+```
+
+The unified tool eliminates the read/write split and provides a sleeve-native interface.
