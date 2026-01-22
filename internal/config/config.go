@@ -47,21 +47,6 @@ type MirrorConfig struct {
 	Token     string `yaml:"github_token"`
 }
 
-// SleeveConfig defines the configuration for a sleeve (agent container).
-type SleeveConfig struct {
-	Name       string          `yaml:"name"`
-	Image      string          `yaml:"image"`
-	CLI        string          `yaml:"cli"`
-	Env        []string        `yaml:"env"`
-	Resources  ResourcesConfig `yaml:"resources"`
-}
-
-// ResourcesConfig defines resource limits for a sleeve.
-type ResourcesConfig struct {
-	Memory string `yaml:"memory"`
-	CPUs   string `yaml:"cpus"`
-}
-
 var envVarPattern = regexp.MustCompile(`\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
 
 func expandEnv(s string) string {
@@ -147,30 +132,3 @@ func LoadEnvoyConfig(path string) (*EnvoyConfig, error) {
 	return config, nil
 }
 
-// LoadSleeveConfig loads sleeve configuration from a YAML file.
-func LoadSleeveConfig(path string) (*SleeveConfig, error) {
-	config := &SleeveConfig{}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	var root yaml.Node
-	if err := yaml.Unmarshal(data, &root); err != nil {
-		return nil, fmt.Errorf("failed to parse YAML: %w", err)
-	}
-
-	expandEnvInConfig(&root)
-
-	expandedData, err := yaml.Marshal(&root)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal expanded YAML: %w", err)
-	}
-
-	if err := yaml.Unmarshal(expandedData, config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
-	}
-
-	return config, nil
-}
