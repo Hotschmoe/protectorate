@@ -1,0 +1,10 @@
+port: 7470
+
+docker:
+  network: cortical-net
+  workspace_root: /workspaces
+  sleeve_image: protectorate-sleeve:latest
+
+poll_interval: 1h
+idle_threshold: 0
+max_sleeves: 10

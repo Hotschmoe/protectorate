@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protectorate Envoy</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            background: #0d1117;
+            color: #c9d1d9;
+            min-height: 100vh;
+        }
+        .header {
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #58a6ff;
+        }
+        .auth-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .auth-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #f85149;
+        }
+        .auth-indicator.authenticated { background: #3fb950; }
+        .main {
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+        .panel {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+        }
+        .panel-header {
+            padding: 1rem;
+            border-bottom: 1px solid #30363d;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .panel-title { font-weight: 600; }
+        .panel-body { padding: 1rem; }
+        .btn {
+            background: #238636;
+            color: #fff;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        .btn:hover { background: #2ea043; }
+        .btn-danger { background: #da3633; }
+        .btn-danger:hover { background: #f85149; }
+        .btn-secondary {
+            background: #21262d;
+            border: 1px solid #30363d;
+        }
+        .btn-secondary:hover { background: #30363d; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            text-align: left;
+            padding: 0.75rem;
+            border-bottom: 1px solid #21262d;
+        }
+        th { color: #8b949e; font-weight: 500; }
+        .status-running { color: #3fb950; }
+        .status-exited { color: #8b949e; }
+        .sleeves-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1rem;
+        }
+        .sleeve-card {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 1rem;
+        }
+        .sleeve-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+            color: #58a6ff;
+        }
+        .sleeve-meta {
+            font-size: 0.875rem;
+            color: #8b949e;
+            margin-bottom: 1rem;
+        }
+        .sleeve-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 2rem;
+            width: 400px;
+        }
+        .modal-title {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+        }
+        .form-group { margin-bottom: 1rem; }
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #8b949e;
+        }
+        .form-input {
+            width: 100%;
+            padding: 0.5rem;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #c9d1d9;
+        }
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+        }
+        .terminal-modal {
+            width: 80%;
+            height: 70%;
+            padding: 0;
+        }
+        .terminal-header {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #30363d;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .terminal-container {
+            height: calc(100% - 50px);
+            padding: 0.5rem;
+        }
+        .full-width { grid-column: 1 / -1; }
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: #8b949e;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">Protectorate Envoy</div>
+        <div class="auth-status">
+            <span>Claude Auth:</span>
+            <div id="auth-indicator" class="auth-indicator"></div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Docker Containers</span>
+                <button class="btn btn-secondary" onclick="refreshContainers()">Refresh</button>
+            </div>
+            <div class="panel-body">
+                <table id="containers-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Image</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Docker Networks</span>
+            </div>
+            <div class="panel-body">
+                <table id="networks-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Driver</th>
+                            <th>Scope</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="panel full-width">
+            <div class="panel-header">
+                <span class="panel-title">Sleeves</span>
+                <button class="btn" onclick="showSpawnModal()">+ Spawn Sleeve</button>
+            </div>
+            <div class="panel-body">
+                <div id="sleeves-grid" class="sleeves-grid">
+                    <div class="empty-state">No sleeves running. Click "+ Spawn Sleeve" to create one.</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="spawn-modal" class="modal">
+        <div class="modal-content">
+            <h2 class="modal-title">Spawn New Sleeve</h2>
+            <form id="spawn-form" onsubmit="spawnSleeve(event)">
+                <div class="form-group">
+                    <label class="form-label">Workspace Path</label>
+                    <input type="text" class="form-input" id="workspace-input"
+                           placeholder="/workspaces/myproject" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Name (optional)</label>
+                    <input type="text" class="form-input" id="name-input"
+                           placeholder="Auto-assigned from pool">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="hideSpawnModal()">Cancel</button>
+                    <button type="submit" class="btn">Spawn</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="terminal-modal" class="modal">
+        <div class="modal-content terminal-modal">
+            <div class="terminal-header">
+                <span id="terminal-title">Terminal</span>
+                <button class="btn btn-secondary" onclick="hideTerminalModal()">Close</button>
+            </div>
+            <div id="terminal-container" class="terminal-container"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+    <script>
+        let currentTerm = null;
+        let currentWs = null;
+
+        async function checkAuth() {
+            try {
+                const resp = await fetch('/api/auth/status');
+                const data = await resp.json();
+                const indicator = document.getElementById('auth-indicator');
+                if (data.authenticated) {
+                    indicator.classList.add('authenticated');
+                } else {
+                    indicator.classList.remove('authenticated');
+                }
+            } catch (e) {
+                console.error('Failed to check auth:', e);
+            }
+        }
+
+        async function refreshContainers() {
+            try {
+                const resp = await fetch('/api/docker/containers');
+                const containers = await resp.json();
+                const tbody = document.querySelector('#containers-table tbody');
+                tbody.innerHTML = containers.map(c => `
+                    <tr>
+                        <td>${c.name || c.id}</td>
+                        <td>${c.image}</td>
+                        <td class="status-${c.state}">${c.status}</td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                console.error('Failed to fetch containers:', e);
+            }
+        }
+
+        async function refreshNetworks() {
+            try {
+                const resp = await fetch('/api/docker/networks');
+                const networks = await resp.json();
+                const tbody = document.querySelector('#networks-table tbody');
+                tbody.innerHTML = networks.map(n => `
+                    <tr>
+                        <td>${n.name}</td>
+                        <td>${n.driver}</td>
+                        <td>${n.scope}</td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                console.error('Failed to fetch networks:', e);
+            }
+        }
+
+        async function refreshSleeves() {
+            try {
+                const resp = await fetch('/api/sleeves');
+                const sleeves = await resp.json();
+                const grid = document.getElementById('sleeves-grid');
+
+                if (sleeves.length === 0) {
+                    grid.innerHTML = '<div class="empty-state">No sleeves running. Click "+ Spawn Sleeve" to create one.</div>';
+                    return;
+                }
+
+                grid.innerHTML = sleeves.map(s => `
+                    <div class="sleeve-card">
+                        <div class="sleeve-name">${s.name}</div>
+                        <div class="sleeve-meta">
+                            <div>Container: ${s.container_id}</div>
+                            <div>Workspace: ${s.workspace}</div>
+                        </div>
+                        <div class="sleeve-actions">
+                            <button class="btn btn-secondary" onclick="openTerminal('${s.name}')">Terminal</button>
+                            <button class="btn btn-danger" onclick="killSleeve('${s.name}')">Kill</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Failed to fetch sleeves:', e);
+            }
+        }
+
+        function showSpawnModal() {
+            document.getElementById('spawn-modal').classList.add('active');
+        }
+
+        function hideSpawnModal() {
+            document.getElementById('spawn-modal').classList.remove('active');
+            document.getElementById('spawn-form').reset();
+        }
+
+        async function spawnSleeve(e) {
+            e.preventDefault();
+            const workspace = document.getElementById('workspace-input').value;
+            const name = document.getElementById('name-input').value;
+
+            try {
+                const resp = await fetch('/api/sleeves', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ workspace, name: name || undefined })
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    alert('Failed to spawn sleeve: ' + err);
+                    return;
+                }
+
+                hideSpawnModal();
+                refreshSleeves();
+                refreshContainers();
+            } catch (e) {
+                console.error('Failed to spawn sleeve:', e);
+                alert('Failed to spawn sleeve: ' + e.message);
+            }
+        }
+
+        async function killSleeve(name) {
+            if (!confirm(`Are you sure you want to kill sleeve "${name}"?`)) {
+                return;
+            }
+
+            try {
+                const resp = await fetch(`/api/sleeves/${name}`, { method: 'DELETE' });
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    alert('Failed to kill sleeve: ' + err);
+                    return;
+                }
+                refreshSleeves();
+                refreshContainers();
+            } catch (e) {
+                console.error('Failed to kill sleeve:', e);
+            }
+        }
+
+        function openTerminal(name) {
+            document.getElementById('terminal-title').textContent = `Terminal - ${name}`;
+            document.getElementById('terminal-modal').classList.add('active');
+
+            const container = document.getElementById('terminal-container');
+            container.innerHTML = '';
+
+            currentTerm = new Terminal({
+                cursorBlink: true,
+                theme: {
+                    background: '#0d1117',
+                    foreground: '#c9d1d9'
+                }
+            });
+
+            const fitAddon = new FitAddon.FitAddon();
+            currentTerm.loadAddon(fitAddon);
+            currentTerm.open(container);
+            fitAddon.fit();
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            currentWs = new WebSocket(`${protocol}//${window.location.host}/sleeves/${name}/terminal`);
+
+            currentWs.binaryType = 'arraybuffer';
+
+            currentWs.onopen = () => {
+                currentTerm.write('Connected to sleeve...\r\n');
+            };
+
+            currentWs.onmessage = (event) => {
+                const data = new Uint8Array(event.data);
+                if (data.length > 0 && data[0] === 0x31) {
+                    currentTerm.write(data.slice(1));
+                }
+            };
+
+            currentWs.onerror = (e) => {
+                currentTerm.write('\r\n[Connection error]\r\n');
+            };
+
+            currentWs.onclose = () => {
+                currentTerm.write('\r\n[Connection closed]\r\n');
+            };
+
+            currentTerm.onData((data) => {
+                if (currentWs && currentWs.readyState === WebSocket.OPEN) {
+                    const msg = new Uint8Array(data.length + 1);
+                    msg[0] = 0x30;
+                    for (let i = 0; i < data.length; i++) {
+                        msg[i + 1] = data.charCodeAt(i);
+                    }
+                    currentWs.send(msg);
+                }
+            });
+
+            window.addEventListener('resize', () => fitAddon.fit());
+        }
+
+        function hideTerminalModal() {
+            document.getElementById('terminal-modal').classList.remove('active');
+            if (currentWs) {
+                currentWs.close();
+                currentWs = null;
+            }
+            if (currentTerm) {
+                currentTerm.dispose();
+                currentTerm = null;
+            }
+        }
+
+        checkAuth();
+        refreshContainers();
+        refreshNetworks();
+        refreshSleeves();
+
+        setInterval(() => {
+            refreshSleeves();
+            refreshContainers();
+        }, 5000);
+    </script>
+</body>
+</html>

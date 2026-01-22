@@ -6,8 +6,8 @@
 *.dylib
 bin/
 dist/
-envoy
-sidecar
+/envoy
+/sidecar
 
 # Test binary
 *.test

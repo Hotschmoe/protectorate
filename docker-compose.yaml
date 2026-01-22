@@ -1,0 +1,18 @@
+services:
+  envoy:
+    build:
+      context: .
+      dockerfile: containers/envoy/Dockerfile
+    ports:
+      - "7470:7470"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.claude/.credentials.json:/host-claude-creds/.credentials.json:ro
+      - ./workspaces:/workspaces
+    networks:
+      - cortical-net
+    restart: unless-stopped
+
+networks:
+  cortical-net:
+    name: cortical-net
