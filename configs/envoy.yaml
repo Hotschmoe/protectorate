@@ -6,5 +6,5 @@ docker:
   sleeve_image: protectorate-sleeve:latest
 
 poll_interval: 1h
-idle_threshold: 0
+idle_threshold: 0s
 max_sleeves: 10
