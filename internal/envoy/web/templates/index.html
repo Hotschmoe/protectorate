@@ -577,7 +577,7 @@
 
             currentWs.onmessage = (event) => {
                 const data = new Uint8Array(event.data);
-                if (data.length > 0 && data[0] === 0) {
+                if (data.length > 0 && data[0] === 48) {
                     currentTerm.write(data.slice(1));
                 }
             };
