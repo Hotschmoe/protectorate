@@ -88,7 +88,21 @@ WE DO:     Orchestrate dozens of them with shared memory and coordination
 ## Build and Development Commands
 
 ```bash
-# Build all binaries
+# Build sleeve base image (slow, only needed once or when upgrading Claude CLI)
+make build-base
+
+# Build all container images (fast after base exists)
+make build
+
+# Build individual images
+make build-sleeve  # Fast rebuild (~30 sec)
+make build-envoy   # Fast rebuild (~5 sec)
+
+# Start/stop services
+make up
+make down
+
+# Build Go binaries locally (for testing outside containers)
 go build ./cmd/envoy
 go build ./cmd/sidecar
 
@@ -97,9 +111,6 @@ go test -race ./...
 
 # Run linter (if configured)
 golangci-lint run
-
-# Start envoy
-./envoy --config configs/envoy.yaml
 ```
 
 ## Architecture

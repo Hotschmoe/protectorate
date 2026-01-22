@@ -43,21 +43,27 @@ WE DO:     Orchestrate dozens of them with shared memory and coordination
 ## Quick Start
 
 ```bash
-# 1. Build all Go binaries
-go build ./cmd/envoy
+# 1. Build sleeve base image (slow, only needed once or when upgrading Claude CLI)
+make build-base
 
-# 2. Build container images
-docker build -t protectorate-envoy:latest -f containers/envoy/Dockerfile .
-docker build -t protectorate-sleeve:latest -f containers/sleeve/Dockerfile containers/sleeve/
+# 2. Build all images (fast after base exists)
+make build
 
-# 3. Clean all containers, networks, volumes (dev machine only!)
-docker compose down -v
-docker stop $(docker ps -aq) 2>/dev/null; docker rm $(docker ps -aq) 2>/dev/null
-docker network prune -f
-docker volume prune -f
+# 3. Start envoy
+make up
+```
 
-# 4. Start envoy
-docker compose up
+## Build Targets
+
+```bash
+make build-base    # Build sleeve-base image (~2 min, run once)
+make build-sleeve  # Build sleeve image (~30 sec, uses base)
+make build-envoy   # Build envoy image (~5 sec)
+make build         # Build envoy + sleeve (requires base)
+make build-all     # Build everything including base
+
+make up            # Start services via docker-compose
+make down          # Stop services
 ```
 
 **Web UI:** http://localhost:7470
