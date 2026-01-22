@@ -536,7 +536,13 @@
 
         function sendResize(cols, rows) {
             if (currentWs && currentWs.readyState === WebSocket.OPEN) {
-                currentWs.send('1' + JSON.stringify({columns: cols, rows: rows}));
+                const json = JSON.stringify({columns: cols, rows: rows});
+                const msg = new Uint8Array(json.length + 1);
+                msg[0] = 1;
+                for (let i = 0; i < json.length; i++) {
+                    msg[i + 1] = json.charCodeAt(i);
+                }
+                currentWs.send(msg.buffer);
             }
         }
 
@@ -570,15 +576,9 @@
             };
 
             currentWs.onmessage = (event) => {
-                if (typeof event.data === 'string') {
-                    if (event.data.length > 0 && event.data[0] === '0') {
-                        currentTerm.write(event.data.slice(1));
-                    }
-                } else {
-                    const data = new Uint8Array(event.data);
-                    if (data.length > 0 && data[0] === 0x30) {
-                        currentTerm.write(data.slice(1));
-                    }
+                const data = new Uint8Array(event.data);
+                if (data.length > 0 && data[0] === 0) {
+                    currentTerm.write(data.slice(1));
                 }
             };
 
@@ -592,7 +592,12 @@
 
             currentTerm.onData((data) => {
                 if (currentWs && currentWs.readyState === WebSocket.OPEN) {
-                    currentWs.send('0' + data);
+                    const msg = new Uint8Array(data.length + 1);
+                    msg[0] = 0;
+                    for (let i = 0; i < data.length; i++) {
+                        msg[i + 1] = data.charCodeAt(i);
+                    }
+                    currentWs.send(msg.buffer);
                 }
             });
 
