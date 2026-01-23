@@ -78,16 +78,17 @@ The dev environment uses volume-mounted binaries and hot-reload for the webui:
 
 ```bash
 make dev           # Start dev environment
-make dev-restart   # Rebuild Go + restart (~5 sec)
+make dev-restart   # Rebuild Go + recreate container (picks up all changes)
 make dev-logs      # View container logs
 make dev-down      # Stop dev environment
 make watch         # Auto-rebuild on file changes (requires inotify-tools)
 ```
 
-| Change Type | Time | Action |
-|-------------|------|--------|
-| HTML/CSS/JS | 0 sec | Just refresh browser |
-| Go code | ~5 sec | `make dev-restart` |
+| Change Type | Action |
+|-------------|--------|
+| HTML/CSS/JS | Just refresh browser |
+| Go code | `make dev-restart` |
+| Compose/entrypoint | `make dev-restart` |
 
 See [docs/build_optimizations.md](docs/build_optimizations.md) for details.
 

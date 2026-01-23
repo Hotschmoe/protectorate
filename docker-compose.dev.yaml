@@ -20,6 +20,9 @@ services:
       # Mount pre-built binary (rebuild with: make bin/envoy)
       - ./bin/envoy:/usr/local/bin/envoy:ro
 
+      # Mount entrypoint (single source of truth)
+      - ./containers/envoy/entrypoint.sh:/entrypoint.sh:ro
+
       # Mount webui for hot-reload (just refresh browser!)
       - ./internal/envoy/web:/app/web:ro
 
@@ -46,22 +49,7 @@ services:
     networks:
       - raven
     user: root
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        # Fix permissions
-        chown -R claude:claude /home/claude/.claude 2>/dev/null || true
-        chown -R claude:claude /workspaces 2>/dev/null || true
-        mkdir -p /app/web 2>/dev/null || true
-
-        # Start tmux session as claude user for terminal access
-        su - claude -c "tmux new-session -d -s envoy" || true
-
-        # Start ttyd in background for terminal access
-        ttyd --port 7681 --writable su - claude -c "tmux attach-session -t envoy" &
-
-        # Run envoy as root (needs Docker socket access)
-        exec /usr/local/bin/envoy --config /etc/envoy/envoy.yaml
+    entrypoint: ["/bin/bash", "/entrypoint.sh"]
     restart: unless-stopped
 
 networks:

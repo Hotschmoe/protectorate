@@ -82,7 +82,7 @@ time-envoy:
 # Development Targets (fast iteration with volume mounts)
 # =============================================================================
 
-.PHONY: dev dev-down dev-logs dev-restart dev-rebuild watch
+.PHONY: dev dev-down dev-logs dev-restart watch
 
 # Start development environment with volume-mounted binary and hot-reload webui
 dev: bin/envoy
@@ -109,15 +109,10 @@ dev-down:
 dev-logs:
 	docker compose -f docker-compose.dev.yaml logs -f
 
-# Restart envoy process after Go code changes
+# Restart envoy with latest Go code and compose changes
 dev-restart: bin/envoy
-	docker compose -f docker-compose.dev.yaml restart envoy
-	@echo "Envoy restarted with new binary"
-
-# Full rebuild and restart (rarely needed)
-dev-rebuild: bin/envoy
-	docker compose -f docker-compose.dev.yaml up -d --force-recreate
-	@echo "Dev environment rebuilt"
+	docker compose -f docker-compose.dev.yaml up -d --force-recreate envoy
+	@echo "Envoy restarted"
 
 # Auto-rebuild on Go file changes (Phase 2 - requires inotify-tools)
 watch:
@@ -143,7 +138,7 @@ help:
 	@echo ""
 	@echo "Development (fast iteration):"
 	@echo "  make dev                 Start dev environment (volume-mounted)"
-	@echo "  make dev-restart         Rebuild Go binary and restart (~5 sec)"
+	@echo "  make dev-restart         Rebuild Go + recreate container (picks up all changes)"
 	@echo "  make dev-logs            View dev container logs"
 	@echo "  make dev-down            Stop dev environment"
 	@echo "  make watch               Auto-rebuild on file changes (requires inotify-tools)"

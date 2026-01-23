@@ -95,15 +95,18 @@ make build-base    # Build base image (slow, ~2 min, run once)
 
 # Start dev environment (volume-mounted binary + hot-reload webui)
 make dev           # Start dev environment
-make dev-restart   # Rebuild Go + restart (~5 sec)
+make dev-restart   # Rebuild Go + recreate container (picks up all changes)
 make dev-logs      # View container logs
 make dev-down      # Stop dev environment
 make watch         # Auto-rebuild on file changes (requires inotify-tools)
 ```
 
 **Dev workflow:**
-- Webui changes (HTML/CSS/JS): Just refresh browser (instant)
-- Go code changes: `make dev-restart` (~5 sec)
+- Webui changes (HTML/CSS/JS): Just refresh browser
+- Go code changes: `make dev-restart`
+- Compose/entrypoint changes: `make dev-restart`
+
+**Note:** Dev compose mounts `containers/envoy/entrypoint.sh` directly, so entrypoint changes are picked up on restart without rebuilding images.
 
 ### Production Build
 

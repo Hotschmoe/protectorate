@@ -5,7 +5,9 @@ TMUX_SESSION="envoy"
 
 # Fix ownership of mounted volumes
 chown -R claude:claude /workspace 2>/dev/null || true
+chown -R claude:claude /workspaces 2>/dev/null || true
 chown -R claude:claude /home/claude/.claude 2>/dev/null || true
+mkdir -p /app/web 2>/dev/null || true
 
 # Copy read-only mounted settings to writable location
 if [ -f /etc/claude/settings.json ]; then
@@ -13,12 +15,25 @@ if [ -f /etc/claude/settings.json ]; then
     chown claude:claude /home/claude/.claude/settings.json
 fi
 
-# Start tmux session as claude user for terminal access
-su - claude -c "tmux new-session -d -s $TMUX_SESSION"
-su - claude -c "tmux send-keys -t $TMUX_SESSION 'cd /workspace && claude --dangerously-skip-permissions' Enter"
+# Create tmux session manager script that respawns on exit
+cat > /usr/local/bin/tmux-session.sh << 'SCRIPT'
+#!/bin/bash
+SESSION="envoy"
+while true; do
+    if ! su - claude -c "tmux has-session -t $SESSION 2>/dev/null"; then
+        su - claude -c "tmux new-session -d -s $SESSION"
+    fi
+    su - claude -c "tmux attach-session -t $SESSION"
+    sleep 0.5
+done
+SCRIPT
+chmod +x /usr/local/bin/tmux-session.sh
 
-# Start ttyd in background for terminal access
-ttyd --port 7681 --writable su - claude -c "tmux attach-session -t $TMUX_SESSION" &
+# Start initial tmux session
+su - claude -c "tmux new-session -d -s $TMUX_SESSION"
+
+# Start ttyd in background with respawning session
+ttyd --port 7681 --writable /usr/local/bin/tmux-session.sh &
 
 # Run envoy (needs Docker socket access, runs as root)
 exec envoy --config /etc/envoy/envoy.yaml
