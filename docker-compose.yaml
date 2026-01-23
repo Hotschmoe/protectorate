@@ -8,12 +8,12 @@ services:
     environment:
       - WORKSPACE_HOST_ROOT=${PWD}/workspaces
       - CREDENTIALS_HOST_PATH=${HOME}/.claude/.credentials.json
-      - SETTINGS_HOST_PATH=${HOME}/.claude/settings.json
+      - SETTINGS_HOST_PATH=${HOME}/.claude.json
       - PLUGINS_HOST_PATH=${HOME}/.claude/plugins
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ~/.claude/.credentials.json:/home/claude/.claude/.credentials.json:ro
-      - ~/.claude/settings.json:/etc/claude/settings.json:ro
+      - ~/.claude.json:/etc/claude/settings.json:ro
       - ~/.claude/plugins:/home/claude/.claude/plugins:ro
       - ./workspaces:/workspaces
     networks:
