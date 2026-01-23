@@ -26,13 +26,12 @@ The Cortical Stack is the memory and task management system for Protectorate sle
 | Data directory | `.cstack/` | Our identity, clean break from upstream |
 | Issue IDs | `cs-xxxx` | Our prefix (configurable) |
 
-We use `.cstack/` (not `.cstack/`) because:
+We use `.cstack/` because:
 - Clean identity separation from upstream beads
 - Signals this is cortical-stack, not beads
 - Avoids confusion if user has both tools installed
 - We're forking and customizing heavily anyway
 
-**Migration note**: Users coming from beads can run `cstk migrate` to convert `.cstack/` to `.cstack/`.
 
 ## Design Principles
 
@@ -432,7 +431,7 @@ bv --robot-capacity        # Parallelization simulation
 ### Final Architecture
 
 ```
-cortical-stack (cs) - STANDALONE TOOL
+cortical-stack (cstk) - STANDALONE TOOL
 |
 |  Works anywhere. No Protectorate required.
 |  Single ~8-10 MB static binary.
@@ -454,9 +453,9 @@ cortical-stack (cs) - STANDALONE TOOL
       --robot flag            # Machine-readable output
 
 
-Protectorate Sidecar (SEPARATE, wraps cs)
+Protectorate Sidecar (SEPARATE, wraps cstk)
 |
-|  Protectorate-specific hooks live HERE, not in cs.
+|  Protectorate-specific hooks live HERE, not in cstk.
 |
 +-- Auto-capture before resleeve
 +-- Error context capture
@@ -607,13 +606,11 @@ cstk triage --robot
 ```
 project/
   .cstack/
-    beads.db          # SQLite - fast local queries
+    stack.db          # SQLite - fast local queries
     issues.jsonl      # Git-sync format
     config.yaml       # Project-specific settings
     .history/         # Timestamped backups (optional)
 ```
-
-**No .cstack/ wrapper** - cortical-stack uses standard .cstack/ directory for compatibility with upstream beads ecosystem.
 
 ---
 
@@ -717,7 +714,7 @@ git commit -m "Complete login endpoint"
 The sidecar wraps cortical-stack with Protectorate-specific behavior:
 
 ```
-Sidecar Hooks (not in cs itself):
+Sidecar Hooks (not in cstk itself):
 
 1. Boot:
    - Read .cstack/, call cstk triage --robot
@@ -758,7 +755,7 @@ Sleeve Container (~23 MB of task tools)
 
 ```
 Sleeve Container (~10 MB of task tools)
-  +-- cs (cortical-stack): 8-10 MB
+  +-- cstk (cortical-stack): 8-10 MB
   +-- Pure Rust, single codebase
   +-- We control everything
   +-- Consistent UX and schemas
