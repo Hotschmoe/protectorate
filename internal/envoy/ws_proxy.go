@@ -1,21 +1,29 @@
 package envoy
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
 
 var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
+	ReadBufferSize:  4096,
+	WriteBufferSize: 4096,
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
 	Subprotocols: []string{"tty"},
 }
+
+const (
+	pongWait     = 60 * time.Second
+	pingInterval = 30 * time.Second
+	pingTimeout  = 5 * time.Second
+)
 
 func (s *Server) proxyWebSocket(w http.ResponseWriter, r *http.Request, targetAddr string) {
 	clientConn, err := upgrader.Upgrade(w, r, nil)
@@ -25,6 +33,12 @@ func (s *Server) proxyWebSocket(w http.ResponseWriter, r *http.Request, targetAd
 	}
 	defer clientConn.Close()
 
+	clientConn.SetReadDeadline(time.Now().Add(pongWait))
+	clientConn.SetPongHandler(func(string) error {
+		clientConn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
+
 	targetURL := url.URL{
 		Scheme: "ws",
 		Host:   targetAddr,
@@ -32,7 +46,8 @@ func (s *Server) proxyWebSocket(w http.ResponseWriter, r *http.Request, targetAd
 	}
 
 	dialer := websocket.Dialer{
-		Subprotocols: []string{"tty"},
+		Subprotocols:     []string{"tty"},
+		HandshakeTimeout: 10 * time.Second,
 	}
 
 	targetConn, _, err := dialer.Dial(targetURL.String(), nil)
@@ -43,6 +58,25 @@ func (s *Server) proxyWebSocket(w http.ResponseWriter, r *http.Request, targetAd
 	defer targetConn.Close()
 
 	log.Printf("proxy connected: client <-> %s", targetAddr)
+
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	go func() {
+		ticker := time.NewTicker(pingInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := clientConn.WriteControl(websocket.PingMessage, nil, time.Now().Add(pingTimeout)); err != nil {
+					cancel()
+					return
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	errCh := make(chan error, 2)
 

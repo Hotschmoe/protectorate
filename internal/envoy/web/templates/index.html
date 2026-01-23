@@ -206,6 +206,25 @@
             margin-left: 0.5rem;
         }
         .ws-status.in-use { color: #f85149; }
+        .terminal-status {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-left: 8px;
+            vertical-align: middle;
+            background: #8b949e;
+        }
+        .terminal-status.connected { background: #3fb950; }
+        .terminal-status.connecting { background: #d29922; animation: pulse 1s infinite; }
+        .terminal-status.disconnected { background: #f85149; }
+        .terminal-status.error { background: #f85149; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .reconnect-info {
+            font-size: 0.75rem;
+            color: #8b949e;
+            margin-left: 0.5rem;
+        }
     </style>
 </head>
 <body>
@@ -317,7 +336,11 @@
     <div id="terminal-modal" class="modal">
         <div class="modal-content terminal-modal">
             <div class="terminal-header">
-                <span id="terminal-title">Terminal</span>
+                <div style="display: flex; align-items: center;">
+                    <span id="terminal-title">Terminal</span>
+                    <span id="terminal-status" class="terminal-status"></span>
+                    <span id="reconnect-info" class="reconnect-info"></span>
+                </div>
                 <button class="btn btn-secondary" onclick="hideTerminalModal()">Close</button>
             </div>
             <div id="terminal-container" class="terminal-container"></div>
@@ -327,8 +350,167 @@
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
     <script>
-        let currentTerm = null;
-        let currentWs = null;
+        let currentConnection = null;
+
+        const TTYD_INPUT = 48;   // '0' - terminal input
+        const TTYD_RESIZE = 49;  // '1' - resize command
+
+        function buildTtydMessage(type, data) {
+            const msg = new Uint8Array(data.length + 1);
+            msg[0] = type;
+            for (let i = 0; i < data.length; i++) {
+                msg[i + 1] = data.charCodeAt(i);
+            }
+            return msg.buffer;
+        }
+
+        class TerminalConnection {
+            constructor(container, wsPath, title) {
+                this.wsPath = wsPath;
+                this.title = title;
+                this.container = container;
+                this.term = null;
+                this.ws = null;
+                this.fitAddon = null;
+                this.reconnectAttempts = 0;
+                this.maxReconnectAttempts = 10;
+                this.baseDelay = 1000;
+                this.maxDelay = 30000;
+                this.shouldReconnect = true;
+                this.resizeTimeout = null;
+                this.resizeHandler = null;
+            }
+
+            initTerminal() {
+                this.container.innerHTML = '';
+                this.term = new Terminal({
+                    cursorBlink: true,
+                    theme: {
+                        background: '#0d1117',
+                        foreground: '#c9d1d9'
+                    }
+                });
+                this.fitAddon = new FitAddon.FitAddon();
+                this.term.loadAddon(this.fitAddon);
+                this.term.open(this.container);
+                this.fitAddon.fit();
+
+                this.term.onData((data) => {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send(buildTtydMessage(TTYD_INPUT, data));
+                    }
+                });
+
+                this.resizeHandler = () => {
+                    this.fitAddon.fit();
+                    this.sendResize();
+                };
+                window.addEventListener('resize', this.resizeHandler);
+            }
+
+            connect() {
+                if (!this.term) {
+                    this.initTerminal();
+                }
+
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                this.ws = new WebSocket(`${protocol}//${window.location.host}${this.wsPath}`, ['tty']);
+                this.ws.binaryType = 'arraybuffer';
+
+                this.updateStatus('connecting');
+
+                this.ws.onopen = () => {
+                    this.reconnectAttempts = 0;
+                    this.updateStatus('connected');
+                    const initData = JSON.stringify({
+                        AuthToken: "",
+                        columns: this.term.cols,
+                        rows: this.term.rows
+                    });
+                    this.ws.send(initData);
+                };
+
+                this.ws.onmessage = (event) => {
+                    const data = new Uint8Array(event.data);
+                    if (data.length > 0 && data[0] === TTYD_INPUT) {
+                        this.term.write(data.slice(1));
+                    }
+                };
+
+                this.ws.onerror = () => {
+                    this.updateStatus('error');
+                };
+
+                this.ws.onclose = (event) => {
+                    this.updateStatus('disconnected');
+                    if (this.shouldReconnect && !event.wasClean) {
+                        this.scheduleReconnect();
+                    } else if (this.shouldReconnect) {
+                        this.term.write('\r\n[Connection closed]\r\n');
+                    }
+                };
+            }
+
+            scheduleReconnect() {
+                if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+                    this.term.write('\r\n[Max reconnection attempts reached]\r\n');
+                    this.updateReconnectInfo('Max attempts reached');
+                    return;
+                }
+
+                const delay = Math.min(
+                    this.baseDelay * Math.pow(2, this.reconnectAttempts),
+                    this.maxDelay
+                );
+                this.reconnectAttempts++;
+
+                this.updateReconnectInfo(`Reconnecting in ${delay/1000}s (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+
+                setTimeout(() => {
+                    if (this.shouldReconnect) {
+                        this.updateReconnectInfo('');
+                        this.connect();
+                    }
+                }, delay);
+            }
+
+            updateStatus(status) {
+                const statusEl = document.getElementById('terminal-status');
+                statusEl.className = 'terminal-status ' + status;
+            }
+
+            updateReconnectInfo(text) {
+                const infoEl = document.getElementById('reconnect-info');
+                infoEl.textContent = text;
+            }
+
+            sendResize() {
+                clearTimeout(this.resizeTimeout);
+                this.resizeTimeout = setTimeout(() => {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        const json = JSON.stringify({columns: this.term.cols, rows: this.term.rows});
+                        this.ws.send(buildTtydMessage(TTYD_RESIZE, json));
+                    }
+                }, 100);
+            }
+
+            dispose() {
+                this.shouldReconnect = false;
+                clearTimeout(this.resizeTimeout);
+                if (this.resizeHandler) {
+                    window.removeEventListener('resize', this.resizeHandler);
+                    this.resizeHandler = null;
+                }
+                if (this.ws) {
+                    this.ws.close();
+                    this.ws = null;
+                }
+                if (this.term) {
+                    this.term.dispose();
+                    this.term = null;
+                }
+            }
+        }
 
         async function checkAuth() {
             try {
@@ -550,83 +732,19 @@
             }
         }
 
-        function sendResize(cols, rows) {
-            if (currentWs && currentWs.readyState === WebSocket.OPEN) {
-                // ttyd protocol: RESIZE = '1' (ASCII 49), followed by JSON
-                const json = JSON.stringify({columns: cols, rows: rows});
-                const msg = new Uint8Array(json.length + 1);
-                msg[0] = 49;  // ASCII '1' for resize
-                for (let i = 0; i < json.length; i++) {
-                    msg[i + 1] = json.charCodeAt(i);
-                }
-                currentWs.send(msg.buffer);
-            }
-        }
-
         function openTerminalWithPath(title, wsPath) {
             document.getElementById('terminal-title').textContent = title;
             document.getElementById('terminal-modal').classList.add('active');
+            document.getElementById('reconnect-info').textContent = '';
 
             const container = document.getElementById('terminal-container');
-            container.innerHTML = '';
 
-            currentTerm = new Terminal({
-                cursorBlink: true,
-                theme: {
-                    background: '#0d1117',
-                    foreground: '#c9d1d9'
-                }
-            });
+            if (currentConnection) {
+                currentConnection.dispose();
+            }
 
-            const fitAddon = new FitAddon.FitAddon();
-            currentTerm.loadAddon(fitAddon);
-            currentTerm.open(container);
-            fitAddon.fit();
-
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            currentWs = new WebSocket(`${protocol}//${window.location.host}${wsPath}`, ['tty']);
-
-            currentWs.binaryType = 'arraybuffer';
-
-            currentWs.onopen = () => {
-                const initData = JSON.stringify({
-                    AuthToken: "",
-                    columns: currentTerm.cols,
-                    rows: currentTerm.rows
-                });
-                currentWs.send(initData);
-            };
-
-            currentWs.onmessage = (event) => {
-                const data = new Uint8Array(event.data);
-                if (data.length > 0 && data[0] === 48) {
-                    currentTerm.write(data.slice(1));
-                }
-            };
-
-            currentWs.onerror = (e) => {
-                if (currentTerm) currentTerm.write('\r\n[Connection error]\r\n');
-            };
-
-            currentWs.onclose = () => {
-                if (currentTerm) currentTerm.write('\r\n[Connection closed]\r\n');
-            };
-
-            currentTerm.onData((data) => {
-                if (currentWs && currentWs.readyState === WebSocket.OPEN) {
-                    const msg = new Uint8Array(data.length + 1);
-                    msg[0] = 48;
-                    for (let i = 0; i < data.length; i++) {
-                        msg[i + 1] = data.charCodeAt(i);
-                    }
-                    currentWs.send(msg.buffer);
-                }
-            });
-
-            window.addEventListener('resize', () => {
-                fitAddon.fit();
-                sendResize(currentTerm.cols, currentTerm.rows);
-            });
+            currentConnection = new TerminalConnection(container, wsPath, title);
+            currentConnection.connect();
         }
 
         function openTerminal(name) {
@@ -639,13 +757,9 @@
 
         function hideTerminalModal() {
             document.getElementById('terminal-modal').classList.remove('active');
-            if (currentWs) {
-                currentWs.close();
-                currentWs = null;
-            }
-            if (currentTerm) {
-                currentTerm.dispose();
-                currentTerm = null;
+            if (currentConnection) {
+                currentConnection.dispose();
+                currentConnection = null;
             }
         }
 
