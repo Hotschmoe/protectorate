@@ -49,6 +49,17 @@ WE DO:     Orchestrate dozens of them with shared memory and coordination
 | Sleeve | Agent container with AI CLI, sidecar, and mounted workspace |
 | Sidecar | Lightweight HTTP server exposing /health, /status, /outbox endpoints |
 
+## Prerequisites
+
+- Docker with BuildKit
+- Go 1.24+
+- `inotify-tools` (optional, for file watcher)
+
+```bash
+# Ubuntu/Debian - install file watcher support
+sudo apt-get install inotify-tools
+```
+
 ## Quick Start
 
 ```bash
