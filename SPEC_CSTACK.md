@@ -1,49 +1,109 @@
 # SPEC: Cortical Stack (Memory System)
 
+## Summary
+
+| Aspect | Decision |
+|--------|----------|
+| **Base** | Fork `beads_rust` (Rust) |
+| **Intelligence** | Port from `beads_viewer` (Go -> Rust) |
+| **Binary** | Single unified tool (~8-10 MB) |
+| **Name** | `cortical-stack` (CLI: `cstk`) |
+| **Standalone** | Yes - works without Protectorate |
+| **Directory** | `.cstack/` |
+
 ## Overview
 
-The Cortical Stack is the memory and task management system for Protectorate sleeves. Rather than building from scratch, we fork and adapt **beads** - a git-backed graph issue tracker designed for AI agents.
+The Cortical Stack is the memory and task management system for Protectorate sleeves. Rather than building from scratch, we fork **beads_rust** and port graph intelligence from **beads_viewer** into a single unified Rust binary.
 
-**Decision**: Fork beads, adapt for sleeve lifecycle.
+**Decision**: Fork beads_rust, port beads_viewer intelligence, single binary.
 
-## Open Questions
+## Naming
+
+| What | Name | Reason |
+|------|------|--------|
+| Repository | `cortical-stack` | Altered Carbon reference, our identity |
+| CLI command | `cstk` | Unique, no conflicts, memorable |
+| Data directory | `.cstack/` | Our identity, clean break from upstream |
+| Issue IDs | `cs-xxxx` | Our prefix (configurable) |
+
+We use `.cstack/` (not `.cstack/`) because:
+- Clean identity separation from upstream beads
+- Signals this is cortical-stack, not beads
+- Avoids confusion if user has both tools installed
+- We're forking and customizing heavily anyway
+
+**Migration note**: Users coming from beads can run `cstk migrate` to convert `.cstack/` to `.cstack/`.
+
+## Design Principles
+
+### Standalone First
+
+```
+cortical-stack is a GENERAL-PURPOSE tool.
+Anyone can use it for their projects.
+It has ZERO Protectorate dependencies.
+
+Protectorate-specific behavior (hypothesis auto-capture,
+resleeve triggers, envoy polling) lives in the SIDECAR,
+not in cortical-stack itself.
+```
+
+### Single Binary
+
+```
+ONE tool to install, ONE tool to learn.
+No separate viewer, no daemon, no services.
+~8-10 MB static binary with everything included.
+```
+
+### Non-Invasive
+
+```
+cortical-stack NEVER runs git automatically.
+User controls when to sync, when to commit.
+Explicit operations only.
+```
+
+---
+
+## Decisions (Resolved)
 
 ### Q1: Go-based beads or Rust-based beads?
 
-| Option | Repository | Notes |
-|--------|------------|-------|
-| Original (Go) | github.com/steveyegge/beads | Steve Yegge's original implementation |
-| Rust rewrite | github.com/Dicklesworthstone/beads_rust | Community rewrite with enhancements |
+**Answer: beads_rust**
 
-**Considerations**:
-- Protectorate is written in Go (easier integration with Go version?)
-- Rust version may have additional features or better performance
-- Maintenance and community activity
-- Feature completeness
-- Schema differences
+| Factor | beads_rust wins |
+|--------|-----------------|
+| Binary size | 5-8 MB vs 30+ MB |
+| Startup | <50ms vs 200+ms |
+| Memory | <30 MB vs 80+ MB |
+| Philosophy | Non-invasive (explicit sync) |
+| Complexity | 26K lines vs 206K lines |
+| Extensibility | Easier to modify |
 
-**Research needed**: Deep comparison of both implementations.
+### Q2: Include beads_viewer intelligence?
 
-### Q2: Include beads_viewer in fork?
+**Answer: Yes, port to Rust and merge into single binary**
 
-Repository: github.com/Dicklesworthstone/beads_viewer
+Rather than shipping two binaries (br + bv), we port the essential graph intelligence algorithms from beads_viewer (Go) into our beads_rust fork (Rust).
 
-beads_viewer is a companion tool providing:
-- Graph intelligence (PageRank, betweenness centrality, etc.)
-- Robot protocol (JSON output for agents)
-- Semantic search
-- Triage recommendations
-- History correlation with git commits
+**Benefits**:
+- Single binary (~8-10 MB vs 8 + 15 = 23 MB)
+- One tool to learn
+- Consistent UX
+- Fewer dependencies in sleeve containers
+- Full control over the codebase
 
-**We do NOT need**: The TUI interface
+**What we port**:
+- Graph metrics (PageRank, betweenness, critical path, cycles)
+- Triage scoring algorithm
+- Parallel execution planning
 
-**We MAY want**: The analysis/ranking algorithms for:
-- `--robot-triage` - prioritized work recommendations
-- `--robot-plan` - parallel execution tracks
-- `--robot-insights` - graph metrics
-- `--robot-search` - semantic search
-
-**Question**: Should these capabilities be merged into our beads fork, or kept separate?
+**What we skip (V1)**:
+- Semantic search (use basic text search)
+- Git correlation (add in V2)
+- Burndown/forecast (add in V2)
+- TUI (not needed)
 
 ---
 
@@ -85,14 +145,14 @@ AI breaks specification into atomic tasks:
 - Testing milestones interspersed throughout
 - Estimate: **300-600 beads** for a substantial project
 
-Output: `.beads/` populated with full task graph
+Output: `.cstack/` populated with full task graph
 
 ### Phase 4: Autonomous Execution (Sleeves)
 
 Envoy orchestrates sleeve work:
-- Sleeve queries `bd ready` for next actionable task
-- Works task, updates bead status
-- Envoy monitors progress, health, blockers
+- Sleeve queries `cstk triage --robot` for prioritized recommendations
+- Works task, updates bead status via `cstk update`
+- Envoy monitors progress via sidecar `/status` endpoint
 - Resleeve on stuck/error conditions
 - Route questions to other sleeves or escalate to human
 
@@ -111,108 +171,120 @@ Envoy notifies user when:
 ### Boot Sequence
 
 ```
-1. Sidecar starts, reads .beads/
-2. Calls equivalent of `bd ready --json`
-3. Presents actionable tasks to AI CLI
-4. AI picks task, sidecar updates bead to in_progress
+1. Sidecar starts
+2. Calls: cstk triage --robot
+3. Presents top recommendation to AI CLI with reasoning
+4. AI accepts task
+5. Sidecar calls: cstk update <id> --status in_progress
 ```
 
 ### Work Loop
 
 ```
-1. AI works on current bead
-2. On completion: sidecar marks bead done, queries next ready
-3. On blocker: sidecar marks blocked, records reason, queries next ready
-4. On error: sidecar captures context, may trigger resleeve
+1. AI works on current task
+2. On completion:
+   - Sidecar calls: cstk close <id> --reason "summary"
+   - Sidecar calls: cstk triage --robot
+   - Presents next task
+3. On blocker:
+   - Sidecar calls: cstk update <id> --status blocked
+   - Sidecar calls: cstk comment <id> "blocked by X"
+   - Sidecar calls: cstk triage --robot (skip blocked, get next)
+4. On error:
+   - Sidecar captures context
+   - May trigger resleeve
 ```
 
 ### Pre-Resleeve
 
 ```
 1. Sidecar detects resleeve trigger (stuck, error, manual)
-2. Auto-captures current state:
-   - What was being attempted (hypothesis)
-   - What was tried
-   - Current errors/blockers
-3. Writes to bead comments or hypothesis field
-4. Resleeve proceeds
+2. Auto-captures:
+   - cstk hypothesis <id> "was attempting X approach"
+   - cstk comment <id> "error: <context>"
+3. Resleeve proceeds
 ```
 
 ### Post-Resleeve
 
 ```
-1. New sleeve boots, sidecar reads .beads/
-2. Finds in_progress bead with hypothesis
-3. Presents context: "Previous sleeve was attempting X, got stuck on Y"
-4. New sleeve continues or pivots
+1. New sleeve boots, sidecar reads .cstack/
+2. Calls: cstk show <in_progress_id> --robot
+3. Reads hypothesis field
+4. Presents to AI CLI:
+   "Previous sleeve was attempting: X
+    Error encountered: Y
+    Suggested next step: Z"
+5. New sleeve continues or pivots
 ```
 
 ---
 
-## Schema Requirements
+## Schema Extensions
 
-Beyond standard beads fields, sleeves need:
+### Hypothesis Field (New)
 
-### Hypothesis Field
+Added to beads_rust Issue struct:
 
-```
-What the sleeve is ABOUT TO TRY, not just what was done.
-Critical for resleeve continuity.
-```
+```rust
+pub struct Issue {
+    // ... existing fields ...
 
-### Auto-Capture Hooks
-
-Triggered automatically by sidecar:
-- On error (capture stack trace, context)
-- On task completion (capture summary)
-- Before resleeve (capture hypothesis)
-
-### Simplified Command Set
-
-Sleeves don't need 40+ commands. Core operations:
-
-```
-cs ready          # What can I work on? (JSON)
-cs start <id>     # Claim task, mark in_progress
-cs done <id>      # Mark completed with optional note
-cs block <id>     # Mark blocked with reason
-cs hypothesis <id> # Record what I'm about to try
-cs triage         # Prioritized recommendations (JSON)
-cs search <query> # Find relevant past work (JSON)
+    /// What the agent is ABOUT TO TRY, not just what was done.
+    /// Critical for resleeve continuity.
+    /// Set via: cstk hypothesis <id> "trying X approach"
+    /// Cleared on close or via: cstk hypothesis <id> --clear
+    pub hypothesis: Option<String>,
+}
 ```
 
----
-
-## File Structure
-
-```
-.cstack/
-  .beads/
-    beads.db          # SQLite - fast local queries
-    issues.jsonl      # Git-sync format (for multi-sleeve merge)
-    config.yaml       # Sleeve-specific defaults
-    .history/         # Timestamped backups
-  MEMORY.md           # Long-form prose context (patterns, learnings)
+**SQLite schema addition**:
+```sql
+ALTER TABLE issues ADD COLUMN hypothesis TEXT;
 ```
 
-**Why both SQLite and JSONL?**
-- SQLite: Fast local queries, dependency resolution
-- JSONL: Git-friendly sync when multiple sleeves touch same workspace
+**JSONL serialization**:
+```json
+{
+  "id": "cs-a1b2",
+  "title": "Implement auth",
+  "status": "in_progress",
+  "hypothesis": "Trying JWT approach with refresh tokens"
+}
+```
+
+### Why Hypothesis Matters
+
+```
+Without hypothesis:
+  Sleeve A works on auth, gets stuck, resleeved.
+  Sleeve B sees: "auth task in_progress"
+  Sleeve B has no idea what A was trying.
+  Sleeve B may retry the same failed approach.
+
+With hypothesis:
+  Sleeve A records: "trying JWT with RS256"
+  Sleeve A gets stuck, auto-captures: "error: key generation failed"
+  Sleeve B sees: "was trying JWT with RS256, failed on key gen"
+  Sleeve B tries different approach: "trying JWT with HS256"
+```
 
 ---
 
 ## Needlecast Integration
 
-Beads handles TASKS. Needlecast handles MESSAGES.
+cortical-stack handles TASKS. Needlecast handles MESSAGES.
 
 ```
-.cstack/.beads/     # What to do (task graph)
+.cstack/             # What to do (task graph)
 .needlecast/        # What to say (inter-sleeve communication)
 ```
 
-Examples:
-- "Task bd-a1b2 blocked on auth module" -> bead update
-- "Hey alice, I pushed auth changes, pull and retry" -> needlecast message
+These are orthogonal systems:
+- Task blocked on auth module -> `cstk update cs-a1b2 --status blocked`
+- "Hey alice, I pushed auth changes" -> needlecast message
+
+Needlecast is a separate spec (SPEC_NEEDLECAST.md).
 
 ---
 
@@ -357,118 +429,363 @@ bv --robot-capacity        # Parallelization simulation
 
 ---
 
-### Recommendation
-
-#### Q1 Answer: Fork beads_rust
-
-**Rationale**:
-
-1. **Container-optimized** - 5-8 MB binary, <50ms startup, <30MB memory. Sleeves need to be lightweight.
-
-2. **Non-invasive philosophy** - beads_rust never runs git automatically. This is critical because:
-   - Sleeves shouldn't auto-commit (envoy controls git operations)
-   - Explicit sync prevents race conditions between sleeves
-   - No daemon = simpler container lifecycle
-
-3. **Simpler to extend** - 26K lines vs 206K lines. Adding hypothesis field, resleeve hooks, sidecar integration is straightforward.
-
-4. **Frozen architecture** - beads_rust is intentionally frozen on SQLite + JSONL. No Dolt federation, no molecules, no gates. This stability is a feature for us.
-
-5. **Schema fits our needs** - 30 fields covers everything Kovac requested. We add hypothesis field, that's it.
-
-**What we give up**: Linear/Jira sync (don't need), daemon mode (don't need), Dolt federation (don't need), advanced molecules/gates (don't need).
-
-#### Q2 Answer: Fork beads_viewer as Separate Tool
-
-**Rationale**:
-
-1. **Don't merge - keep separate** - beads_viewer is Go, beads_rust is Rust. Different languages, different build chains.
-
-2. **Include in sleeve containers** - Both `br` (beads_rust) and `bv` (beads_viewer) installed in sleeves:
-   - `br` for CRUD operations (create, update, close, sync)
-   - `bv --robot-*` for intelligence (triage, insights, plan)
-
-3. **Strip the TUI** - Fork beads_viewer, remove Charmbracelet TUI dependencies, keep only `--robot-*` commands. Results in smaller binary.
-
-4. **Standardize JSON schema** - Ensure `br --json` and `bv --robot-*` output compatible formats for sidecar consumption.
-
-#### Final Architecture
+### Final Architecture
 
 ```
-Sleeve Container
-  |
-  +-- br (beads_rust fork)
-  |     - CRUD: create, update, close, sync
-  |     - Query: ready, list, search, dep tree
-  |     - ~8 MB binary
-  |
-  +-- bv (beads_viewer fork, robot-only)
-  |     - Intelligence: triage, insights, plan
-  |     - Correlation: history, file-beads
-  |     - ~15 MB binary (no TUI)
-  |
-  +-- Sidecar
-        - Calls br/bv, exposes /status, /health
-        - Auto-capture hooks
-        - Hypothesis management
+cortical-stack (cs) - STANDALONE TOOL
+|
+|  Works anywhere. No Protectorate required.
+|  Single ~8-10 MB static binary.
+|
++-- Core Commands (from beads_rust)
+|     cstk init
+|     cstk create / update / close
+|     cstk ready / list / search
+|     cstk dep add / remove / tree / cycles
+|     cstk sync (SQLite <-> JSONL)
+|
++-- Intelligence Commands (ported from beads_viewer)
+|     cstk triage [--json]      # Prioritized recommendations
+|     cstk insights [--json]    # Graph metrics dashboard
+|     cstk plan [--json]        # Parallel execution tracks
+|
++-- Protectorate Extensions (optional, for sleeves)
+      cstk hypothesis <id>      # Record what you're about to try
+      --robot flag            # Machine-readable output
+
+
+Protectorate Sidecar (SEPARATE, wraps cs)
+|
+|  Protectorate-specific hooks live HERE, not in cs.
+|
++-- Auto-capture before resleeve
++-- Error context capture
++-- /status endpoint (calls cstk triage --json)
++-- /health endpoint
 ```
 
-#### Fork Names
+---
 
-| Upstream | Fork Name | Purpose |
-|----------|-----------|---------|
-| beads_rust | `cortical-stack` or `cs` | Task CRUD, sync |
-| beads_viewer | `cortical-viewer` or `cv` | Graph intelligence |
+## Graph Intelligence (Ported from beads_viewer)
 
-Or keep the `br`/`bv` names for familiarity.
+### Algorithms to Port
+
+| Algorithm | Purpose | Rust Library | Effort |
+|-----------|---------|--------------|--------|
+| PageRank | Network importance | `petgraph` built-in | Low |
+| Betweenness | Bottleneck detection | `petgraph` built-in | Low |
+| Articulation Points | Single points of failure | `petgraph` built-in | Low |
+| Cycle Detection | Circular deps | `petgraph` built-in | Low |
+| Critical Path | Longest path to terminal | Topo sort + DP | Medium |
+| HITS (Hubs/Auth) | Aggregators vs prereqs | ~100 lines iterative | Medium |
+| Eigenvector | Influencer detection | `nalgebra` or custom | Medium |
+| K-Core | Structural cohesion | ~80 lines | Medium |
+
+**petgraph** covers 60% of what we need out of the box.
+
+### Triage Scoring (from beads_viewer)
+
+```
+score = (
+    pagerank_weight     * pagerank_score     +  # 0.35
+    betweenness_weight  * betweenness_score  +  # 0.25
+    blocker_weight      * blocker_count      +  # 0.20
+    staleness_weight    * days_stale         +  # 0.10
+    priority_weight     * priority_score        # 0.10
+)
+```
+
+Each recommendation includes:
+- **Score**: 0.0-1.0 (higher = more urgent)
+- **Breakdown**: Component scores
+- **Reasons[]**: Human-readable explanations
+- **Unblocks[]**: What gets unblocked if this completes
+
+### Output Modes
+
+```
+cstk triage              # Human-readable table
+cstk triage --json       # Machine-readable JSON
+cstk triage --robot      # Alias for --json (agent-friendly)
+```
+
+### Phased Metrics (from beads_viewer design)
+
+**Phase 1 (instant, always available)**:
+- Degree (in/out)
+- Topological order
+- Density
+- Ready work count
+
+**Phase 2 (async, 500ms timeout)**:
+- PageRank
+- Betweenness
+- HITS
+- Critical path
+
+Status flags tell consumers which metrics are trustworthy:
+```json
+{
+  "metrics": {
+    "pagerank": { "status": "computed", "elapsed_ms": 45 },
+    "betweenness": { "status": "timeout", "elapsed_ms": 500 }
+  }
+}
+```
+
+---
+
+## Command Reference
+
+### Core Commands (from beads_rust)
+
+```bash
+# Initialization
+cstk init                          # Create .cstack/ in current directory
+
+# Issue Lifecycle
+cstk create "title" [--type bug|feature|task|epic]
+cstk update <id> --status in_progress
+cstk close <id> --reason "completed"
+cstk delete <id>                   # Soft delete (tombstone)
+
+# Querying
+cstk list [--status open] [--priority 0-1] [--label X]
+cstk ready                         # Unblocked, actionable work
+cstk show <id>                     # Full issue details
+cstk search "query"                # Text search
+
+# Dependencies
+cstk dep add <child> <parent>      # Child blocked by parent
+cstk dep remove <child> <parent>
+cstk dep tree <id>                 # Visualize dependency tree
+cstk dep cycles                    # Detect circular dependencies
+
+# Labels & Comments
+cstk label add <id> <label>
+cstk comment <id> "text"
+
+# Sync
+cstk sync                          # Bidirectional SQLite <-> JSONL
+cstk sync --flush-only             # Export to JSONL
+cstk sync --import-only            # Import from JSONL
+```
+
+### Intelligence Commands (ported from beads_viewer)
+
+```bash
+# Triage - "What should I work on?"
+cstk triage [--json]               # Ranked recommendations with reasoning
+cstk triage --top 5                # Limit to top N
+cstk triage --label backend        # Filter by label
+
+# Insights - "What's the state of the project?"
+cstk insights [--json]             # Full metrics dashboard
+cstk insights --metric pagerank    # Single metric
+
+# Plan - "How can work be parallelized?"
+cstk plan [--json]                 # Parallel execution tracks
+cstk plan --agents 3               # Optimize for N parallel workers
+```
+
+### Protectorate Extensions (optional)
+
+```bash
+# Hypothesis - "What am I about to try?"
+cstk hypothesis <id> "trying X approach"
+cstk hypothesis <id> --clear
+
+# Robot mode (for sidecar/agent consumption)
+cstk ready --robot                 # JSON output, no colors
+cstk triage --robot
+```
+
+---
+
+## File Structure
+
+```
+project/
+  .cstack/
+    beads.db          # SQLite - fast local queries
+    issues.jsonl      # Git-sync format
+    config.yaml       # Project-specific settings
+    .history/         # Timestamped backups (optional)
+```
+
+**No .cstack/ wrapper** - cortical-stack uses standard .cstack/ directory for compatibility with upstream beads ecosystem.
 
 ---
 
 ## Implementation Checklist
 
-### Phase 1: Fork & Baseline
+### Phase 1: Fork & Baseline (Week 1)
 
 - [ ] Fork beads_rust to hotschmoe/cortical-stack
-- [ ] Fork beads_viewer to hotschmoe/cortical-viewer
-- [ ] Verify both build and pass tests
-- [ ] Document upstream commit hashes
+- [ ] Verify builds and passes all tests
+- [ ] Document upstream commit hash
+- [ ] Set up CI/CD (GitHub Actions)
 
-### Phase 2: Customize beads_rust (cs)
+### Phase 2: Schema Extensions (Week 1)
 
 - [ ] Add `hypothesis` field to Issue struct
-- [ ] Add `cs hypothesis <id> "text"` command
-- [ ] Add `--sleeve-mode` flag (JSON-only output, no colors)
-- [ ] Simplify to ~15 core commands (remove rarely-used)
-- [ ] Update README for Protectorate use case
+- [ ] Add `hypothesis` column to SQLite schema
+- [ ] Add `cstk hypothesis <id> "text"` command
+- [ ] Update JSONL serialization
+- [ ] Write tests for hypothesis CRUD
 
-### Phase 3: Customize beads_viewer (cv)
+### Phase 3: Graph Foundation (Week 2)
 
-- [ ] Remove TUI (Charmbracelet stack)
-- [ ] Keep only `--robot-*` commands
-- [ ] Add `--hypothesis` flag to triage output
-- [ ] Ensure JSON schemas match cs output
-- [ ] Reduce binary size
+- [ ] Add `petgraph` dependency
+- [ ] Create `src/graph/` module
+- [ ] Implement dependency graph builder from issues
+- [ ] Port cycle detection (verify against beads_viewer)
+- [ ] Port articulation points
+- [ ] Write graph tests
 
-### Phase 4: Sidecar Integration
+### Phase 4: Core Metrics (Week 2-3)
 
-- [ ] Sidecar calls `cs ready --json` for actionable work
-- [ ] Sidecar calls `cv --robot-triage` for prioritization
-- [ ] Auto-capture: `cs hypothesis` before resleeve
-- [ ] Auto-capture: `cs comment` on errors
-- [ ] Expose via `/status` endpoint
+- [ ] Implement PageRank (use petgraph)
+- [ ] Implement betweenness centrality (use petgraph)
+- [ ] Implement critical path (topo sort + longest path)
+- [ ] Add timeout handling for expensive metrics
+- [ ] Write metric tests with known graphs
 
-### Phase 5: Envoy Integration
+### Phase 5: Advanced Metrics (Week 3)
 
-- [ ] Envoy queries sleeve sidecars for triage data
-- [ ] Envoy aggregates cross-sleeve insights
-- [ ] Envoy detects stuck sleeves (no progress on ready)
-- [ ] Envoy notifies user on milestones/blockers
+- [ ] Implement HITS (hubs/authorities)
+- [ ] Implement eigenvector centrality
+- [ ] Implement k-core decomposition
+- [ ] Implement slack calculation
+- [ ] Validate against beads_viewer output
+
+### Phase 6: Triage & Intelligence Commands (Week 4)
+
+- [ ] Implement triage scoring algorithm
+- [ ] Add `cstk triage` command with --json output
+- [ ] Add `cstk insights` command
+- [ ] Add `cstk plan` command (parallel tracks)
+- [ ] Add --robot flag for machine-readable output
+- [ ] Write integration tests
+
+### Phase 7: Polish & Documentation (Week 4)
+
+- [ ] Update README for standalone use
+- [ ] Document all commands
+- [ ] Add examples for common workflows
+- [ ] Performance benchmarks
+- [ ] Release v0.1.0
+
+### Phase 8: Protectorate Integration (Post-release)
+
+- [ ] Sidecar calls `cstk triage --robot`
+- [ ] Auto-capture: `cstk hypothesis` before resleeve
+- [ ] Auto-capture: `cstk comment` on errors
+- [ ] Envoy queries sleeve sidecars
+- [ ] Envoy detects stuck sleeves
+
+---
+
+## Standalone vs Protectorate Usage
+
+### Standalone Usage (Anyone)
+
+```bash
+# Initialize in any project
+cd my-project
+cstk init
+
+# Create tasks from spec
+cstk create "Implement auth" --type feature --priority 1
+cstk create "Add login endpoint" --type task
+cstk dep add cs-002 cs-001  # Login depends on auth
+
+# Work on tasks
+cstk triage                 # What should I work on?
+cstk update cs-002 --status in_progress
+# ... do work ...
+cstk close cs-002 --reason "Implemented"
+
+# Sync with git
+cstk sync --flush-only
+git add .cstack/
+git commit -m "Complete login endpoint"
+```
+
+### Protectorate Usage (Sleeves)
+
+The sidecar wraps cortical-stack with Protectorate-specific behavior:
+
+```
+Sidecar Hooks (not in cs itself):
+
+1. Boot:
+   - Read .cstack/, call cstk triage --robot
+   - Present top task to AI CLI
+
+2. Work Loop:
+   - Monitor AI CLI activity
+   - On task claim: cstk update --status in_progress
+   - On completion: cstk close, cstk triage for next
+
+3. Pre-Resleeve:
+   - Auto-call: cstk hypothesis <current> "was attempting X"
+   - Auto-call: cstk comment <current> "error context..."
+
+4. Post-Resleeve:
+   - Read hypothesis from in_progress task
+   - Present to new AI CLI: "Previous sleeve was trying X"
+```
+
+**Key Point**: cortical-stack knows nothing about sleeves, sidecars, or envoy. It's just a task tracker with graph intelligence. Protectorate wraps it.
+
+---
+
+## Comparison: Before vs After
+
+### Before (Two Binaries)
+
+```
+Sleeve Container (~23 MB of task tools)
+  +-- br (beads_rust): 8 MB
+  +-- bv (beads_viewer): 15 MB
+  +-- Different languages (Rust + Go)
+  +-- Different maintainers
+  +-- Schema compatibility issues
+```
+
+### After (Single Binary)
+
+```
+Sleeve Container (~10 MB of task tools)
+  +-- cs (cortical-stack): 8-10 MB
+  +-- Pure Rust, single codebase
+  +-- We control everything
+  +-- Consistent UX and schemas
+```
+
+---
+
+## Dependencies
+
+### Rust Crates
+
+| Crate | Purpose | Size Impact |
+|-------|---------|-------------|
+| `petgraph` | Graph algorithms | ~200 KB |
+| `rusqlite` | SQLite (already in beads_rust) | - |
+| `serde` | JSON serialization (already in beads_rust) | - |
+| `clap` | CLI parsing (already in beads_rust) | - |
+| `nalgebra` | Linear algebra (eigenvector, optional) | ~500 KB |
+
+Estimated binary size: **8-10 MB** (vs 5-8 MB for beads_rust alone).
 
 ---
 
 ## References
 
-- [beads (Go)](https://github.com/steveyegge/beads)
-- [beads_rust](https://github.com/Dicklesworthstone/beads_rust)
-- [beads_viewer](https://github.com/Dicklesworthstone/beads_viewer)
+- [beads_rust](https://github.com/Dicklesworthstone/beads_rust) - Our fork base
+- [beads_viewer](https://github.com/Dicklesworthstone/beads_viewer) - Algorithm reference
+- [beads (Go)](https://github.com/steveyegge/beads) - Original inspiration
+- [petgraph](https://docs.rs/petgraph) - Rust graph library
 - [Kovac Conversation](./kovac_convo.md) - Early sleeve feedback on memory needs
