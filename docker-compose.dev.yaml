@@ -54,6 +54,12 @@ services:
         chown -R claude:claude /workspaces 2>/dev/null || true
         mkdir -p /app/web 2>/dev/null || true
 
+        # Start tmux session as claude user for terminal access
+        su - claude -c "tmux new-session -d -s envoy" || true
+
+        # Start ttyd in background for terminal access
+        ttyd --port 7681 --writable su - claude -c "tmux attach-session -t envoy" &
+
         # Run envoy as root (needs Docker socket access)
         exec /usr/local/bin/envoy --config /etc/envoy/envoy.yaml
     restart: unless-stopped

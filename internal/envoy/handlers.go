@@ -21,7 +21,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
-	credPath := "/host-claude-creds/.credentials.json"
+	credPath := "/home/claude/.claude/.credentials.json"
 	_, err := os.Stat(credPath)
 	authenticated := err == nil
 
