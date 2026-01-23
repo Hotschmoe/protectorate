@@ -211,9 +211,12 @@
 <body>
     <header class="header">
         <div class="logo">Protectorate Envoy</div>
-        <div class="auth-status">
-            <span>Claude Auth:</span>
-            <div id="auth-indicator" class="auth-indicator"></div>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <button class="btn btn-secondary" onclick="openEnvoyTerminal()">Envoy Terminal</button>
+            <div class="auth-status">
+                <span>Claude Auth:</span>
+                <div id="auth-indicator" class="auth-indicator"></div>
+            </div>
         </div>
     </header>
 
@@ -229,6 +232,7 @@
                         <tr>
                             <th>Name</th>
                             <th>Image</th>
+                            <th>Version</th>
                             <th>Status</th>
                         </tr>
                     </thead>
@@ -341,18 +345,30 @@
             }
         }
 
+        function parseImageVersion(image) {
+            const parts = image.split(':');
+            if (parts.length > 1) {
+                return { name: parts[0], version: parts.slice(1).join(':') };
+            }
+            return { name: image, version: 'latest' };
+        }
+
         async function refreshContainers() {
             try {
                 const resp = await fetch('/api/docker/containers');
                 const containers = await resp.json();
                 const tbody = document.querySelector('#containers-table tbody');
-                tbody.innerHTML = containers.map(c => `
+                tbody.innerHTML = containers.map(c => {
+                    const { name: imageName, version } = parseImageVersion(c.image);
+                    return `
                     <tr>
                         <td>${c.name || c.id}</td>
-                        <td>${c.image}</td>
+                        <td>${imageName}</td>
+                        <td>${version}</td>
                         <td class="status-${c.state}">${c.status}</td>
                     </tr>
-                `).join('');
+                    `;
+                }).join('');
             } catch (e) {
                 console.error('Failed to fetch containers:', e);
             }
@@ -547,8 +563,8 @@
             }
         }
 
-        function openTerminal(name) {
-            document.getElementById('terminal-title').textContent = `Terminal - ${name}`;
+        function openTerminalWithPath(title, wsPath) {
+            document.getElementById('terminal-title').textContent = title;
             document.getElementById('terminal-modal').classList.add('active');
 
             const container = document.getElementById('terminal-container');
@@ -568,13 +584,11 @@
             fitAddon.fit();
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            currentWs = new WebSocket(`${protocol}//${window.location.host}/sleeves/${name}/terminal`, ['tty']);
+            currentWs = new WebSocket(`${protocol}//${window.location.host}${wsPath}`, ['tty']);
 
             currentWs.binaryType = 'arraybuffer';
 
             currentWs.onopen = () => {
-                // ttyd protocol requires JSON_DATA handshake first
-                // The '{' character serves as the command identifier
                 const initData = JSON.stringify({
                     AuthToken: "",
                     columns: currentTerm.cols,
@@ -600,9 +614,8 @@
 
             currentTerm.onData((data) => {
                 if (currentWs && currentWs.readyState === WebSocket.OPEN) {
-                    // ttyd protocol: INPUT = '0' (ASCII 48), followed by data
                     const msg = new Uint8Array(data.length + 1);
-                    msg[0] = 48;  // ASCII '0' for input
+                    msg[0] = 48;
                     for (let i = 0; i < data.length; i++) {
                         msg[i + 1] = data.charCodeAt(i);
                     }
@@ -614,6 +627,14 @@
                 fitAddon.fit();
                 sendResize(currentTerm.cols, currentTerm.rows);
             });
+        }
+
+        function openTerminal(name) {
+            openTerminalWithPath(`Terminal - ${name}`, `/sleeves/${name}/terminal`);
+        }
+
+        function openEnvoyTerminal() {
+            openTerminalWithPath('Terminal - Envoy (Poe)', '/envoy/terminal');
         }
 
         function hideTerminalModal() {

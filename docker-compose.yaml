@@ -1,5 +1,6 @@
 services:
   envoy:
+    container_name: envoy-poe
     build:
       context: .
       dockerfile: containers/envoy/Dockerfile

@@ -1,0 +1,63 @@
+# docker-compose.dev.yaml
+# Development configuration with volume-mounted binaries and hot-reload webui
+#
+# Usage:
+#   make dev        # Start dev environment
+#   make dev-logs   # View logs
+#   make dev-down   # Stop dev environment
+#
+# Webui changes: Just refresh browser (no rebuild needed!)
+# Go changes:    make dev-restart
+
+services:
+  envoy:
+    image: protectorate/base:latest
+    container_name: envoy-dev
+    ports:
+      - "7470:7470"
+      - "7681:7681"
+    volumes:
+      # Mount pre-built binary (rebuild with: make bin/envoy)
+      - ./bin/envoy:/usr/local/bin/envoy:ro
+
+      # Mount webui for hot-reload (just refresh browser!)
+      - ./internal/envoy/web:/app/web:ro
+
+      # Mount configs
+      - ./configs/envoy.yaml:/etc/envoy/envoy.yaml:ro
+
+      # Docker socket for sleeve management
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # Claude credentials and settings
+      - ${HOME}/.claude/.credentials.json:/home/claude/.claude/.credentials.json:ro
+      - ${HOME}/.claude.json:/etc/claude/settings.json:ro
+      - ${HOME}/.claude/plugins:/home/claude/.claude/plugins:ro
+
+      # Workspaces
+      - ./workspaces:/workspaces
+
+    environment:
+      - DEV_MODE=true
+      - WORKSPACE_HOST_ROOT=${PWD}/workspaces
+      - CREDENTIALS_HOST_PATH=${HOME}/.claude/.credentials.json
+      - SETTINGS_HOST_PATH=${HOME}/.claude.json
+      - PLUGINS_HOST_PATH=${HOME}/.claude/plugins
+    networks:
+      - raven
+    user: root
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        # Fix permissions
+        chown -R claude:claude /home/claude/.claude 2>/dev/null || true
+        chown -R claude:claude /workspaces 2>/dev/null || true
+        mkdir -p /app/web 2>/dev/null || true
+
+        # Run envoy as claude user
+        exec su claude -c '/usr/local/bin/envoy --config /etc/envoy/envoy.yaml'
+    restart: unless-stopped
+
+networks:
+  raven:
+    name: raven

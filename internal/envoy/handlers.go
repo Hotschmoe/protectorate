@@ -132,12 +132,31 @@ func (s *Server) handleSleeveTerminal(w http.ResponseWriter, r *http.Request) {
 	s.proxyWebSocket(w, r, sleeve.TTYDAddress)
 }
 
+func (s *Server) handleEnvoyTerminal(w http.ResponseWriter, r *http.Request) {
+	s.proxyWebSocket(w, r, "localhost:7681")
+}
+
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
 
+	// DEV_MODE: Serve from filesystem for hot-reload (no rebuild needed)
+	if os.Getenv("DEV_MODE") == "true" {
+		devPaths := []string{
+			"/app/web/templates/index.html",              // Mounted in container
+			"./internal/envoy/web/templates/index.html",  // Local development
+		}
+		for _, path := range devPaths {
+			if _, err := os.Stat(path); err == nil {
+				http.ServeFile(w, r, path)
+				return
+			}
+		}
+	}
+
+	// PROD: Serve from embedded filesystem
 	w.Header().Set("Content-Type", "text/html")
 	html, err := webFS.ReadFile("web/templates/index.html")
 	if err != nil {

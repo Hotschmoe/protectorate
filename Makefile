@@ -78,9 +78,77 @@ time-sleeve:
 time-envoy:
 	time $(MAKE) build-envoy
 
+# =============================================================================
+# Development Targets (fast iteration with volume mounts)
+# =============================================================================
+
+.PHONY: dev dev-down dev-logs dev-restart dev-rebuild watch
+
+# Start development environment with volume-mounted binary and hot-reload webui
+dev: bin/envoy
+	@echo "Starting dev environment..."
+	@echo "  - Binary mounted from ./bin/envoy"
+	@echo "  - Webui hot-reload enabled (just refresh browser)"
+	@echo "  - API available at http://localhost:7470"
+	@echo ""
+	docker compose -f docker-compose.dev.yaml up -d
+	@echo ""
+	@echo "Dev environment ready!"
+	@echo "  Webui: http://localhost:7470"
+	@echo "  Logs:  make dev-logs"
+	@echo ""
+	@echo "Workflow:"
+	@echo "  Webui changes: Edit HTML -> Refresh browser (instant)"
+	@echo "  Go changes:    make dev-restart (~5 sec)"
+
+# Stop development environment
+dev-down:
+	docker compose -f docker-compose.dev.yaml down
+
+# View development logs
+dev-logs:
+	docker compose -f docker-compose.dev.yaml logs -f
+
+# Restart envoy process after Go code changes
+dev-restart: bin/envoy
+	docker compose -f docker-compose.dev.yaml restart envoy
+	@echo "Envoy restarted with new binary"
+
+# Full rebuild and restart (rarely needed)
+dev-rebuild: bin/envoy
+	docker compose -f docker-compose.dev.yaml up -d --force-recreate
+	@echo "Dev environment rebuilt"
+
+# Auto-rebuild on Go file changes (Phase 2 - requires inotify-tools)
+watch:
+	@chmod +x ./scripts/watch.sh
+	@./scripts/watch.sh
+
+# =============================================================================
+# Production/Release Targets
+# =============================================================================
+
+.PHONY: release
+
+# Build production containers (full multi-stage builds)
+release: build-all
+	@echo "Production build complete"
+
+# =============================================================================
+# Help
+# =============================================================================
+
 help:
 	@echo "Protectorate Build Targets"
 	@echo ""
+	@echo "Development (fast iteration):"
+	@echo "  make dev                 Start dev environment (volume-mounted)"
+	@echo "  make dev-restart         Rebuild Go binary and restart (~5 sec)"
+	@echo "  make dev-logs            View dev container logs"
+	@echo "  make dev-down            Stop dev environment"
+	@echo "  make watch               Auto-rebuild on file changes (requires inotify-tools)"
+	@echo ""
+	@echo "Container Builds:"
 	@echo "  make build-base          Build shared base image (slow, ~2 min, run once)"
 	@echo "  make build-sleeve        Build sleeve image (fast, ~3 sec)"
 	@echo "  make build-envoy         Build envoy for dev (fast, ~3 sec, local Go)"
@@ -88,7 +156,11 @@ help:
 	@echo "  make build               Build envoy + sleeve for dev"
 	@echo "  make build-all           Build everything for release (includes base)"
 	@echo ""
+	@echo "Production:"
+	@echo "  make release             Full production build"
 	@echo "  make up                  Start services via docker-compose"
 	@echo "  make down                Stop services"
+	@echo ""
+	@echo "Cleanup:"
 	@echo "  make clean               Remove all containers and networks"
 	@echo "  make clean-all           Remove containers, networks, and images"
