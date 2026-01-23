@@ -87,30 +87,42 @@ WE DO:     Orchestrate dozens of them with shared memory and coordination
 
 ## Build and Development Commands
 
+### Development (Fast Iteration)
+
 ```bash
-# Build sleeve base image (slow, only needed once or when upgrading Claude CLI)
-make build-base
+# First time setup
+make build-base    # Build base image (slow, ~2 min, run once)
 
-# Build all container images (fast after base exists)
-make build
+# Start dev environment (volume-mounted binary + hot-reload webui)
+make dev           # Start dev environment
+make dev-restart   # Rebuild Go + restart (~5 sec)
+make dev-logs      # View container logs
+make dev-down      # Stop dev environment
+make watch         # Auto-rebuild on file changes (requires inotify-tools)
+```
 
-# Build individual images
-make build-sleeve  # Fast rebuild (~30 sec)
-make build-envoy   # Fast rebuild (~5 sec)
+**Dev workflow:**
+- Webui changes (HTML/CSS/JS): Just refresh browser (instant)
+- Go code changes: `make dev-restart` (~5 sec)
 
-# Start/stop services
-make up
-make down
+### Production Build
 
-# Build Go binaries locally (for testing outside containers)
-go build ./cmd/envoy
-go build ./cmd/sidecar
+```bash
+make build         # Build envoy + sleeve containers
+make build-sleeve  # Build sleeve image
+make build-envoy   # Build envoy image (uses local Go binary)
+make release       # Full production build (multi-stage Docker)
 
-# Run tests
-go test -race ./...
+make up            # Start production services
+make down          # Stop services
+```
 
-# Run linter (if configured)
-golangci-lint run
+### Testing
+
+```bash
+go build ./cmd/envoy     # Build Go binary locally
+go test -race ./...      # Run tests
+golangci-lint run        # Run linter (if configured)
 ```
 
 ## Architecture
@@ -146,6 +158,41 @@ golangci-lint run
 
 - `protocol/`: Shared types (SleeveStatus, Message, SpawnRequest, ResleeveRequest)
 - `config/`: YAML configuration loading with environment variable substitution
+
+### Project Structure
+
+```
+protectorate/
+├── cmd/
+│   ├── envoy/main.go              # Envoy entry point
+│   └── sidecar/main.go            # Sidecar entry point
+├── internal/
+│   ├── config/                    # YAML config loading
+│   ├── envoy/                     # Envoy server, handlers, Docker client
+│   │   ├── web/templates/         # Webui HTML (hot-reload in dev)
+│   │   └── web/static/            # Static assets
+│   └── protocol/                  # Shared types
+├── containers/
+│   ├── base/Dockerfile            # Shared base image
+│   ├── envoy/
+│   │   ├── Dockerfile             # Production multi-stage build
+│   │   ├── Dockerfile.dev         # Dev build (uses local binary)
+│   │   └── entrypoint.sh
+│   └── sleeve/
+│       ├── Dockerfile
+│       └── entrypoint.sh
+├── configs/
+│   └── envoy.yaml                 # Envoy configuration
+├── scripts/
+│   └── watch.sh                   # File watcher for auto-rebuild
+├── docs/
+│   └── build_optimizations.md     # Dev workflow documentation
+├── bin/                           # Local Go binaries (gitignored)
+├── workspaces/                    # Sleeve workspaces (gitignored)
+├── docker-compose.yaml            # Production compose
+├── docker-compose.dev.yaml        # Dev compose (volume mounts)
+└── Makefile                       # Build targets
+```
 
 ### State Management
 

@@ -52,30 +52,46 @@ WE DO:     Orchestrate dozens of them with shared memory and coordination
 ## Quick Start
 
 ```bash
-# 1. Build sleeve base image (slow, only needed once or when upgrading Claude CLI)
+# 1. Build base image (slow, only needed once)
 make build-base
 
-# 2. Build all images (fast after base exists)
-make build
-
-# 3. Start envoy
-make up
-```
-
-## Build Targets
-
-```bash
-make build-base    # Build sleeve-base image (~2 min, run once)
-make build-sleeve  # Build sleeve image (~30 sec, uses base)
-make build-envoy   # Build envoy image (~5 sec)
-make build         # Build envoy + sleeve (requires base)
-make build-all     # Build everything including base
-
-make up            # Start services via docker-compose
-make down          # Stop services
+# 2. Start dev environment (fast iteration)
+make dev
 ```
 
 **Web UI:** http://localhost:7470
+
+## Development (Fast Iteration)
+
+The dev environment uses volume-mounted binaries and hot-reload for the webui:
+
+```bash
+make dev           # Start dev environment
+make dev-restart   # Rebuild Go + restart (~5 sec)
+make dev-logs      # View container logs
+make dev-down      # Stop dev environment
+make watch         # Auto-rebuild on file changes (requires inotify-tools)
+```
+
+| Change Type | Time | Action |
+|-------------|------|--------|
+| HTML/CSS/JS | 0 sec | Just refresh browser |
+| Go code | ~5 sec | `make dev-restart` |
+
+See [docs/build_optimizations.md](docs/build_optimizations.md) for details.
+
+## Production Build
+
+```bash
+make build-base    # Build base image (~2 min, run once)
+make build-sleeve  # Build sleeve image
+make build-envoy   # Build envoy image (dev: local Go)
+make build         # Build envoy + sleeve
+make release       # Full production build (multi-stage)
+
+make up            # Start production services
+make down          # Stop services
+```
 
 ## API
 
