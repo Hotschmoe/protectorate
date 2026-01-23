@@ -54,8 +54,8 @@ services:
         chown -R claude:claude /workspaces 2>/dev/null || true
         mkdir -p /app/web 2>/dev/null || true
 
-        # Run envoy as claude user
-        exec su claude -c '/usr/local/bin/envoy --config /etc/envoy/envoy.yaml'
+        # Run envoy as root (needs Docker socket access)
+        exec /usr/local/bin/envoy --config /etc/envoy/envoy.yaml
     restart: unless-stopped
 
 networks:
