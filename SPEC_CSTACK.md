@@ -7,7 +7,7 @@
 | **Base** | Fork `beads_rust` (Rust) |
 | **Intelligence** | Port from `beads_viewer` (Go -> Rust) |
 | **Binary** | Single unified tool (~8-10 MB) |
-| **Name** | `cortical-stack` (CLI: `cstk`) |
+| **Name** | `cortical-stack` (CLI: `cstack`) |
 | **Standalone** | Yes - works without Protectorate |
 | **Directory** | `.cstack/` |
 
@@ -22,7 +22,7 @@ The Cortical Stack is the memory and task management system for Protectorate sle
 | What | Name | Reason |
 |------|------|--------|
 | Repository | `cortical-stack` | Altered Carbon reference, our identity |
-| CLI command | `cstk` | Unique, no conflicts, memorable |
+| CLI command | `cstack` | Unique, no conflicts, memorable |
 | Data directory | `.cstack/` | Our identity, clean break from upstream |
 | Issue IDs | `cs-xxxx` | Our prefix (configurable) |
 
@@ -149,8 +149,8 @@ Output: `.cstack/` populated with full task graph
 ### Phase 4: Autonomous Execution (Sleeves)
 
 Envoy orchestrates sleeve work:
-- Sleeve queries `cstk triage --robot` for prioritized recommendations
-- Works task, updates bead status via `cstk update`
+- Sleeve queries `cstack triage --robot` for prioritized recommendations
+- Works task, updates bead status via `cstack update`
 - Envoy monitors progress via sidecar `/status` endpoint
 - Resleeve on stuck/error conditions
 - Route questions to other sleeves or escalate to human
@@ -171,10 +171,10 @@ Envoy notifies user when:
 
 ```
 1. Sidecar starts
-2. Calls: cstk triage --robot
+2. Calls: cstack triage --robot
 3. Presents top recommendation to AI CLI with reasoning
 4. AI accepts task
-5. Sidecar calls: cstk update <id> --status in_progress
+5. Sidecar calls: cstack update <id> --status in_progress
 ```
 
 ### Work Loop
@@ -182,13 +182,13 @@ Envoy notifies user when:
 ```
 1. AI works on current task
 2. On completion:
-   - Sidecar calls: cstk close <id> --reason "summary"
-   - Sidecar calls: cstk triage --robot
+   - Sidecar calls: cstack close <id> --reason "summary"
+   - Sidecar calls: cstack triage --robot
    - Presents next task
 3. On blocker:
-   - Sidecar calls: cstk update <id> --status blocked
-   - Sidecar calls: cstk comment <id> "blocked by X"
-   - Sidecar calls: cstk triage --robot (skip blocked, get next)
+   - Sidecar calls: cstack update <id> --status blocked
+   - Sidecar calls: cstack comment <id> "blocked by X"
+   - Sidecar calls: cstack triage --robot (skip blocked, get next)
 4. On error:
    - Sidecar captures context
    - May trigger resleeve
@@ -199,8 +199,8 @@ Envoy notifies user when:
 ```
 1. Sidecar detects resleeve trigger (stuck, error, manual)
 2. Auto-captures:
-   - cstk hypothesis <id> "was attempting X approach"
-   - cstk comment <id> "error: <context>"
+   - cstack hypothesis <id> "was attempting X approach"
+   - cstack comment <id> "error: <context>"
 3. Resleeve proceeds
 ```
 
@@ -208,7 +208,7 @@ Envoy notifies user when:
 
 ```
 1. New sleeve boots, sidecar reads .cstack/
-2. Calls: cstk show <in_progress_id> --robot
+2. Calls: cstack show <in_progress_id> --robot
 3. Reads hypothesis field
 4. Presents to AI CLI:
    "Previous sleeve was attempting: X
@@ -231,8 +231,8 @@ pub struct Issue {
 
     /// What the agent is ABOUT TO TRY, not just what was done.
     /// Critical for resleeve continuity.
-    /// Set via: cstk hypothesis <id> "trying X approach"
-    /// Cleared on close or via: cstk hypothesis <id> --clear
+    /// Set via: cstack hypothesis <id> "trying X approach"
+    /// Cleared on close or via: cstack hypothesis <id> --clear
     pub hypothesis: Option<String>,
 }
 ```
@@ -280,7 +280,7 @@ cortical-stack handles TASKS. Needlecast handles MESSAGES.
 ```
 
 These are orthogonal systems:
-- Task blocked on auth module -> `cstk update cs-a1b2 --status blocked`
+- Task blocked on auth module -> `cstack update cs-a1b2 --status blocked`
 - "Hey alice, I pushed auth changes" -> needlecast message
 
 Needlecast is a separate spec (SPEC_NEEDLECAST.md).
@@ -431,35 +431,35 @@ bv --robot-capacity        # Parallelization simulation
 ### Final Architecture
 
 ```
-cortical-stack (cstk) - STANDALONE TOOL
+cortical-stack (cstack) - STANDALONE TOOL
 |
 |  Works anywhere. No Protectorate required.
 |  Single ~8-10 MB static binary.
 |
 +-- Core Commands (from beads_rust)
-|     cstk init
-|     cstk create / update / close
-|     cstk ready / list / search
-|     cstk dep add / remove / tree / cycles
-|     cstk sync (SQLite <-> JSONL)
+|     cstack init
+|     cstack create / update / close
+|     cstack ready / list / search
+|     cstack dep add / remove / tree / cycles
+|     cstack sync (SQLite <-> JSONL)
 |
 +-- Intelligence Commands (ported from beads_viewer)
-|     cstk triage [--json]      # Prioritized recommendations
-|     cstk insights [--json]    # Graph metrics dashboard
-|     cstk plan [--json]        # Parallel execution tracks
+|     cstack triage [--json]      # Prioritized recommendations
+|     cstack insights [--json]    # Graph metrics dashboard
+|     cstack plan [--json]        # Parallel execution tracks
 |
 +-- Protectorate Extensions (optional, for sleeves)
-      cstk hypothesis <id>      # Record what you're about to try
+      cstack hypothesis <id>      # Record what you're about to try
       --robot flag            # Machine-readable output
 
 
-Protectorate Sidecar (SEPARATE, wraps cstk)
+Protectorate Sidecar (SEPARATE, wraps cstack)
 |
-|  Protectorate-specific hooks live HERE, not in cstk.
+|  Protectorate-specific hooks live HERE, not in cstack.
 |
 +-- Auto-capture before resleeve
 +-- Error context capture
-+-- /status endpoint (calls cstk triage --json)
++-- /status endpoint (calls cstack triage --json)
 +-- /health endpoint
 ```
 
@@ -503,9 +503,9 @@ Each recommendation includes:
 ### Output Modes
 
 ```
-cstk triage              # Human-readable table
-cstk triage --json       # Machine-readable JSON
-cstk triage --robot      # Alias for --json (agent-friendly)
+cstack triage              # Human-readable table
+cstack triage --json       # Machine-readable JSON
+cstack triage --robot      # Alias for --json (agent-friendly)
 ```
 
 ### Phased Metrics (from beads_viewer design)
@@ -540,63 +540,63 @@ Status flags tell consumers which metrics are trustworthy:
 
 ```bash
 # Initialization
-cstk init                          # Create .cstack/ in current directory
+cstack init                          # Create .cstack/ in current directory
 
 # Issue Lifecycle
-cstk create "title" [--type bug|feature|task|epic]
-cstk update <id> --status in_progress
-cstk close <id> --reason "completed"
-cstk delete <id>                   # Soft delete (tombstone)
+cstack create "title" [--type bug|feature|task|epic]
+cstack update <id> --status in_progress
+cstack close <id> --reason "completed"
+cstack delete <id>                   # Soft delete (tombstone)
 
 # Querying
-cstk list [--status open] [--priority 0-1] [--label X]
-cstk ready                         # Unblocked, actionable work
-cstk show <id>                     # Full issue details
-cstk search "query"                # Text search
+cstack list [--status open] [--priority 0-1] [--label X]
+cstack ready                         # Unblocked, actionable work
+cstack show <id>                     # Full issue details
+cstack search "query"                # Text search
 
 # Dependencies
-cstk dep add <child> <parent>      # Child blocked by parent
-cstk dep remove <child> <parent>
-cstk dep tree <id>                 # Visualize dependency tree
-cstk dep cycles                    # Detect circular dependencies
+cstack dep add <child> <parent>      # Child blocked by parent
+cstack dep remove <child> <parent>
+cstack dep tree <id>                 # Visualize dependency tree
+cstack dep cycles                    # Detect circular dependencies
 
 # Labels & Comments
-cstk label add <id> <label>
-cstk comment <id> "text"
+cstack label add <id> <label>
+cstack comment <id> "text"
 
 # Sync
-cstk sync                          # Bidirectional SQLite <-> JSONL
-cstk sync --flush-only             # Export to JSONL
-cstk sync --import-only            # Import from JSONL
+cstack sync                          # Bidirectional SQLite <-> JSONL
+cstack sync --flush-only             # Export to JSONL
+cstack sync --import-only            # Import from JSONL
 ```
 
 ### Intelligence Commands (ported from beads_viewer)
 
 ```bash
 # Triage - "What should I work on?"
-cstk triage [--json]               # Ranked recommendations with reasoning
-cstk triage --top 5                # Limit to top N
-cstk triage --label backend        # Filter by label
+cstack triage [--json]               # Ranked recommendations with reasoning
+cstack triage --top 5                # Limit to top N
+cstack triage --label backend        # Filter by label
 
 # Insights - "What's the state of the project?"
-cstk insights [--json]             # Full metrics dashboard
-cstk insights --metric pagerank    # Single metric
+cstack insights [--json]             # Full metrics dashboard
+cstack insights --metric pagerank    # Single metric
 
 # Plan - "How can work be parallelized?"
-cstk plan [--json]                 # Parallel execution tracks
-cstk plan --agents 3               # Optimize for N parallel workers
+cstack plan [--json]                 # Parallel execution tracks
+cstack plan --agents 3               # Optimize for N parallel workers
 ```
 
 ### Protectorate Extensions (optional)
 
 ```bash
 # Hypothesis - "What am I about to try?"
-cstk hypothesis <id> "trying X approach"
-cstk hypothesis <id> --clear
+cstack hypothesis <id> "trying X approach"
+cstack hypothesis <id> --clear
 
 # Robot mode (for sidecar/agent consumption)
-cstk ready --robot                 # JSON output, no colors
-cstk triage --robot
+cstack ready --robot                 # JSON output, no colors
+cstack triage --robot
 ```
 
 ---
@@ -627,7 +627,7 @@ project/
 
 - [ ] Add `hypothesis` field to Issue struct
 - [ ] Add `hypothesis` column to SQLite schema
-- [ ] Add `cstk hypothesis <id> "text"` command
+- [ ] Add `cstack hypothesis <id> "text"` command
 - [ ] Update JSONL serialization
 - [ ] Write tests for hypothesis CRUD
 
@@ -659,9 +659,9 @@ project/
 ### Phase 6: Triage & Intelligence Commands (Week 4)
 
 - [ ] Implement triage scoring algorithm
-- [ ] Add `cstk triage` command with --json output
-- [ ] Add `cstk insights` command
-- [ ] Add `cstk plan` command (parallel tracks)
+- [ ] Add `cstack triage` command with --json output
+- [ ] Add `cstack insights` command
+- [ ] Add `cstack plan` command (parallel tracks)
 - [ ] Add --robot flag for machine-readable output
 - [ ] Write integration tests
 
@@ -675,9 +675,9 @@ project/
 
 ### Phase 8: Protectorate Integration (Post-release)
 
-- [ ] Sidecar calls `cstk triage --robot`
-- [ ] Auto-capture: `cstk hypothesis` before resleeve
-- [ ] Auto-capture: `cstk comment` on errors
+- [ ] Sidecar calls `cstack triage --robot`
+- [ ] Auto-capture: `cstack hypothesis` before resleeve
+- [ ] Auto-capture: `cstack comment` on errors
 - [ ] Envoy queries sleeve sidecars
 - [ ] Envoy detects stuck sleeves
 
@@ -690,21 +690,21 @@ project/
 ```bash
 # Initialize in any project
 cd my-project
-cstk init
+cstack init
 
 # Create tasks from spec
-cstk create "Implement auth" --type feature --priority 1
-cstk create "Add login endpoint" --type task
-cstk dep add cs-002 cs-001  # Login depends on auth
+cstack create "Implement auth" --type feature --priority 1
+cstack create "Add login endpoint" --type task
+cstack dep add cs-002 cs-001  # Login depends on auth
 
 # Work on tasks
-cstk triage                 # What should I work on?
-cstk update cs-002 --status in_progress
+cstack triage                 # What should I work on?
+cstack update cs-002 --status in_progress
 # ... do work ...
-cstk close cs-002 --reason "Implemented"
+cstack close cs-002 --reason "Implemented"
 
 # Sync with git
-cstk sync --flush-only
+cstack sync --flush-only
 git add .cstack/
 git commit -m "Complete login endpoint"
 ```
@@ -714,20 +714,20 @@ git commit -m "Complete login endpoint"
 The sidecar wraps cortical-stack with Protectorate-specific behavior:
 
 ```
-Sidecar Hooks (not in cstk itself):
+Sidecar Hooks (not in cstack itself):
 
 1. Boot:
-   - Read .cstack/, call cstk triage --robot
+   - Read .cstack/, call cstack triage --robot
    - Present top task to AI CLI
 
 2. Work Loop:
    - Monitor AI CLI activity
-   - On task claim: cstk update --status in_progress
-   - On completion: cstk close, cstk triage for next
+   - On task claim: cstack update --status in_progress
+   - On completion: cstack close, cstack triage for next
 
 3. Pre-Resleeve:
-   - Auto-call: cstk hypothesis <current> "was attempting X"
-   - Auto-call: cstk comment <current> "error context..."
+   - Auto-call: cstack hypothesis <current> "was attempting X"
+   - Auto-call: cstack comment <current> "error context..."
 
 4. Post-Resleeve:
    - Read hypothesis from in_progress task
@@ -755,7 +755,7 @@ Sleeve Container (~23 MB of task tools)
 
 ```
 Sleeve Container (~10 MB of task tools)
-  +-- cstk (cortical-stack): 8-10 MB
+  +-- cstack (cortical-stack): 8-10 MB
   +-- Pure Rust, single codebase
   +-- We control everything
   +-- Consistent UX and schemas
