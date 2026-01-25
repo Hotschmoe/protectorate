@@ -20,3 +20,6 @@ https://github.com/Dicklesworthstone/coding_agent_usage_tracker
 https://github.com/Dicklesworthstone/coding_agent_session_search
 https://github.com/Dicklesworthstone/coding_agent_account_manager
 https://github.com/Dicklesworthstone/flywheel_connectors
+https://github.com/intellectronica/agent-skills
+https://github.com/blader/Claudeception
+https://github.com/remorses/critique
