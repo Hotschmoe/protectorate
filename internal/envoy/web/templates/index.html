@@ -316,6 +316,17 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.4; }
         }
+        .inline-spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #30363d;
+            border-top-color: #58a6ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
     </style>
 </head>
 <body>
@@ -527,10 +538,6 @@
 
     <div id="cstack-init-modal" class="modal">
         <div class="modal-content">
-            <div id="cstack-loading" class="spawn-loading">
-                <div class="spinner"></div>
-                <div class="cstack-loading-text">Initializing cstack...</div>
-            </div>
             <h2 class="modal-title">Initialize Cstack</h2>
             <p>Workspace: <strong id="cstack-init-ws-name"></strong></p>
 
@@ -1026,7 +1033,13 @@
             </div>`;
         }
 
+        let initializingCstackPaths = new Set();
+
         function formatCstackStatus(cstack, ws) {
+            if (initializingCstackPaths.has(ws.path)) {
+                return `<span style="color:#8b949e"><span class="inline-spinner"></span> Initializing...</span>`;
+            }
+
             if (!cstack || !cstack.exists) {
                 const escapedPath = ws.path.replace(/'/g, "\\'");
                 return `<button class="btn btn-secondary btn-small"
@@ -1251,29 +1264,17 @@
             document.getElementById('cstack-init-modal').classList.remove('active');
             document.getElementById('cstack-init-form').reset();
             document.getElementById('cstack-init-error').classList.add('hidden');
-            hideCstackLoading();
-        }
-
-        function showCstackLoading(msg) {
-            document.querySelector('.cstack-loading-text').textContent = msg || 'Initializing cstack...';
-            document.getElementById('cstack-loading').classList.add('active');
-        }
-
-        function hideCstackLoading() {
-            document.getElementById('cstack-loading').classList.remove('active');
         }
 
         async function initCstack(e) {
             e.preventDefault();
             const wsPath = document.getElementById('cstack-init-ws-path').value;
             const mode = document.querySelector('input[name="cstack-mode"]:checked').value;
-            const btn = document.getElementById('cstack-init-btn');
 
-            const loadingMsg = mode === 'interview'
-                ? 'Initializing cstack (interview mode)...'
-                : 'Initializing cstack...';
-            showCstackLoading(loadingMsg);
-            document.getElementById('cstack-init-error').classList.add('hidden');
+            // Close modal immediately and show spinner in table
+            hideCstackInitModal();
+            initializingCstackPaths.add(wsPath);
+            refreshWorkspacesTable();
 
             try {
                 const resp = await fetch(
@@ -1286,22 +1287,18 @@
                 );
 
                 const result = await resp.json();
+                initializingCstackPaths.delete(wsPath);
 
                 if (!result.success) {
-                    hideCstackLoading();
-                    document.getElementById('cstack-init-error').textContent = result.error || 'Init failed';
-                    document.getElementById('cstack-init-error').classList.remove('hidden');
-                    return;
+                    alert('Cstack init failed: ' + (result.error || 'Unknown error'));
                 }
 
-                hideCstackLoading();
-                hideCstackInitModal();
                 refreshWorkspacesTable();
 
-            } catch (e) {
-                hideCstackLoading();
-                document.getElementById('cstack-init-error').textContent = e.message;
-                document.getElementById('cstack-init-error').classList.remove('hidden');
+            } catch (err) {
+                initializingCstackPaths.delete(wsPath);
+                alert('Cstack init failed: ' + err.message);
+                refreshWorkspacesTable();
             }
         }
 
