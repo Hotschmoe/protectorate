@@ -49,7 +49,38 @@ WE DO:     Orchestrate dozens of them with shared memory and coordination
 | Sleeve | Agent container with AI CLI, sidecar, and mounted workspace |
 | Sidecar | Lightweight HTTP server exposing /health, /status, /outbox endpoints |
 
-## Prerequisites
+## Installation
+
+One-line install for Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hotschmoe/protectorate/master/install.sh | bash
+```
+
+This will:
+- Install Docker (if needed)
+- Install Claude CLI (if needed)
+- Authenticate with Claude
+- Generate long-lived OAuth token
+- Clone repo to `~/protectorate`
+- Pull pre-built container images
+- Start Envoy
+
+**Web UI:** http://localhost:7470
+
+### Uninstall
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hotschmoe/protectorate/master/uninstall.sh | bash
+```
+
+Removes containers, network, and optionally images/directory. Does not remove Docker or Claude CLI.
+
+---
+
+## Development
+
+Prerequisites for building from source:
 
 - Docker with BuildKit
 - Go 1.24+
@@ -60,7 +91,7 @@ WE DO:     Orchestrate dozens of them with shared memory and coordination
 sudo apt-get install inotify-tools
 ```
 
-## Quick Start
+### Quick Start (Dev)
 
 ```bash
 # 1. Build base image (slow, only needed once)
@@ -72,7 +103,7 @@ make dev
 
 **Web UI:** http://localhost:7470
 
-## Development (Fast Iteration)
+### Fast Iteration
 
 The dev environment uses volume-mounted binaries and hot-reload for the webui:
 
@@ -92,7 +123,7 @@ make watch         # Auto-rebuild on file changes (requires inotify-tools)
 
 See [docs/build_optimizations.md](docs/build_optimizations.md) for details.
 
-## Production Build
+### Production Build
 
 ```bash
 make build-base    # Build base image (~2 min, run once)
