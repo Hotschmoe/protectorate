@@ -293,6 +293,19 @@
         .git-behind { color: #d29922; }
         .git-commit-hash { color: #8b949e; font-family: monospace; }
         .git-commit-time { color: #6e7681; font-size: 0.85em; }
+        .btn-small {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            margin-right: 0.25rem;
+        }
+        .btn-small:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 0.25rem;
+        }
     </style>
 </head>
 <body>
@@ -382,6 +395,7 @@
                                 <th>Git Status</th>
                                 <th>Last Commit</th>
                                 <th>Sleeve</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -469,6 +483,31 @@
                     <button type="submit" class="btn" id="clone-submit-btn">Clone</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <div id="switch-branch-modal" class="modal">
+        <div class="modal-content">
+            <div id="switch-loading" class="spawn-loading">
+                <div class="spinner"></div>
+                <div class="switch-loading-text">Switching branch...</div>
+            </div>
+            <h2 class="modal-title">Switch Branch</h2>
+            <p style="margin-bottom: 1rem;">Workspace: <strong id="switch-ws-name"></strong></p>
+            <form id="switch-form" onsubmit="switchBranch(event)">
+                <div class="form-group">
+                    <label class="form-label">Select Branch</label>
+                    <select class="form-select" id="branch-select" required>
+                        <option value="">Loading branches...</option>
+                    </select>
+                </div>
+                <div id="switch-error" class="error-text hidden"></div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="hideSwitchModal()">Cancel</button>
+                    <button type="submit" class="btn" id="switch-submit-btn">Switch</button>
+                </div>
+            </form>
+            <input type="hidden" id="switch-ws-path">
         </div>
     </div>
 
@@ -796,6 +835,7 @@
                     const gitStatus = formatGitStatus(ws.git, ws.in_use);
                     const lastCommit = formatLastCommit(ws.git);
                     const sleeve = ws.sleeve_name || '-';
+                    const actions = formatWorkspaceActions(ws);
                     return `
                     <tr>
                         <td>${ws.name}</td>
@@ -803,6 +843,7 @@
                         <td>${gitStatus}</td>
                         <td>${lastCommit}</td>
                         <td>${sleeve}</td>
+                        <td>${actions}</td>
                     </tr>
                     `;
                 }).join('');
@@ -845,6 +886,175 @@
                 ? git.last_commit_msg.substring(0, 30) + '...'
                 : git.last_commit_msg;
             return `<span class="git-commit-hash">${git.last_commit_hash}</span> ${msg} <span class="git-commit-time">(${git.last_commit_time})</span>`;
+        }
+
+        function formatWorkspaceActions(ws) {
+            const isGitRepo = ws.git !== null;
+            const canSwitch = isGitRepo && !ws.in_use && !ws.git.is_dirty;
+            const switchDisabled = !canSwitch ? 'disabled' : '';
+            const fetchDisabled = !isGitRepo ? 'disabled' : '';
+
+            let switchTitle = 'Switch branch';
+            if (!isGitRepo) {
+                switchTitle = 'Not a git repository';
+            } else if (ws.in_use) {
+                switchTitle = 'Workspace in use by ' + ws.sleeve_name;
+            } else if (ws.git.is_dirty) {
+                switchTitle = 'Has uncommitted changes';
+            }
+
+            const escapedPath = ws.path.replace(/'/g, "\\'");
+            const escapedName = ws.name.replace(/'/g, "\\'");
+
+            return `<div class="action-buttons">
+                <button class="btn btn-secondary btn-small" ${switchDisabled} title="${switchTitle}"
+                        onclick="showSwitchModal('${escapedPath}', '${escapedName}')">Switch</button>
+                <button class="btn btn-secondary btn-small" ${fetchDisabled} title="${isGitRepo ? 'Fetch from remote' : 'Not a git repository'}"
+                        onclick="fetchRemote('${escapedPath}', this)">Fetch</button>
+            </div>`;
+        }
+
+        let currentSwitchWsPath = '';
+
+        async function showSwitchModal(wsPath, wsName) {
+            currentSwitchWsPath = wsPath;
+            document.getElementById('switch-ws-name').textContent = wsName;
+            document.getElementById('switch-ws-path').value = wsPath;
+            document.getElementById('switch-error').classList.add('hidden');
+            document.getElementById('branch-select').innerHTML = '<option value="">Loading branches...</option>';
+            document.getElementById('switch-branch-modal').classList.add('active');
+
+            try {
+                const resp = await fetch(`/api/workspaces/branches?workspace=${encodeURIComponent(wsPath)}`);
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    document.getElementById('switch-error').textContent = err;
+                    document.getElementById('switch-error').classList.remove('hidden');
+                    return;
+                }
+
+                const branches = await resp.json();
+                const select = document.getElementById('branch-select');
+                let options = '';
+
+                if (branches.local && branches.local.length > 0) {
+                    options += '<optgroup label="Local Branches">';
+                    for (const b of branches.local) {
+                        const selected = b === branches.current ? 'selected' : '';
+                        const current = b === branches.current ? ' (current)' : '';
+                        options += `<option value="${b}" ${selected}>${b}${current}</option>`;
+                    }
+                    options += '</optgroup>';
+                }
+
+                if (branches.remote && branches.remote.length > 0) {
+                    options += '<optgroup label="Remote Branches">';
+                    for (const b of branches.remote) {
+                        options += `<option value="${b}">${b}</option>`;
+                    }
+                    options += '</optgroup>';
+                }
+
+                if (options === '') {
+                    options = '<option value="">No branches found</option>';
+                }
+
+                select.innerHTML = options;
+            } catch (e) {
+                document.getElementById('switch-error').textContent = e.message;
+                document.getElementById('switch-error').classList.remove('hidden');
+            }
+        }
+
+        function hideSwitchModal() {
+            document.getElementById('switch-branch-modal').classList.remove('active');
+            document.getElementById('switch-form').reset();
+            document.getElementById('switch-error').classList.add('hidden');
+            hideSwitchLoading();
+            currentSwitchWsPath = '';
+        }
+
+        function showSwitchLoading(msg) {
+            document.querySelector('.switch-loading-text').textContent = msg || 'Switching branch...';
+            document.getElementById('switch-loading').classList.add('active');
+            document.getElementById('switch-submit-btn').disabled = true;
+        }
+
+        function hideSwitchLoading() {
+            document.getElementById('switch-loading').classList.remove('active');
+            document.getElementById('switch-submit-btn').disabled = false;
+        }
+
+        async function switchBranch(e) {
+            e.preventDefault();
+            const wsPath = document.getElementById('switch-ws-path').value;
+            const branch = document.getElementById('branch-select').value;
+
+            if (!branch) {
+                document.getElementById('switch-error').textContent = 'Please select a branch';
+                document.getElementById('switch-error').classList.remove('hidden');
+                return;
+            }
+
+            showSwitchLoading('Switching to ' + branch + '...');
+            document.getElementById('switch-error').classList.add('hidden');
+
+            try {
+                const resp = await fetch(`/api/workspaces/branches?workspace=${encodeURIComponent(wsPath)}&action=switch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ workspace: wsPath, branch: branch })
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    document.getElementById('switch-error').textContent = err;
+                    document.getElementById('switch-error').classList.remove('hidden');
+                    hideSwitchLoading();
+                    return;
+                }
+
+                hideSwitchLoading();
+                hideSwitchModal();
+                refreshWorkspacesTable();
+            } catch (e) {
+                hideSwitchLoading();
+                document.getElementById('switch-error').textContent = e.message;
+                document.getElementById('switch-error').classList.remove('hidden');
+            }
+        }
+
+        async function fetchRemote(wsPath, btn) {
+            const originalText = btn.textContent;
+            btn.textContent = 'Fetching...';
+            btn.disabled = true;
+
+            try {
+                const resp = await fetch(`/api/workspaces/branches?workspace=${encodeURIComponent(wsPath)}&action=fetch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ workspace: wsPath })
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    alert('Fetch failed: ' + err);
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    return;
+                }
+
+                btn.textContent = 'Done!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    refreshWorkspacesTable();
+                }, 1000);
+            } catch (e) {
+                alert('Fetch failed: ' + e.message);
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
         }
 
         function updateWorkspaceSelect() {

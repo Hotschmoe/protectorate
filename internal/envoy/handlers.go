@@ -234,3 +234,103 @@ func (s *Server) handleCloneWorkspace(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
+
+func (s *Server) handleWorkspaceBranches(w http.ResponseWriter, r *http.Request) {
+	workspace := r.URL.Query().Get("workspace")
+	if workspace == "" {
+		http.Error(w, "workspace parameter required", http.StatusBadRequest)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		branches, err := s.workspaces.ListBranches(workspace)
+		if err != nil {
+			if strings.Contains(err.Error(), "not a git repository") {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(branches)
+
+	case http.MethodPost:
+		action := r.URL.Query().Get("action")
+
+		switch action {
+		case "switch":
+			var req protocol.SwitchBranchRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "invalid request body", http.StatusBadRequest)
+				return
+			}
+
+			if req.Workspace == "" {
+				req.Workspace = workspace
+			}
+			if req.Branch == "" {
+				http.Error(w, "branch required", http.StatusBadRequest)
+				return
+			}
+
+			err := s.workspaces.SwitchBranch(req.Workspace, req.Branch)
+			if err != nil {
+				errMsg := err.Error()
+				if strings.Contains(errMsg, "not found") {
+					http.Error(w, errMsg, http.StatusNotFound)
+				} else if strings.Contains(errMsg, "in use") || strings.Contains(errMsg, "uncommitted") {
+					http.Error(w, errMsg, http.StatusConflict)
+				} else if strings.Contains(errMsg, "not a git repository") {
+					http.Error(w, errMsg, http.StatusBadRequest)
+				} else {
+					http.Error(w, errMsg, http.StatusInternalServerError)
+				}
+				return
+			}
+
+			// Return updated workspace info
+			workspaces, err := s.workspaces.List()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			for _, ws := range workspaces {
+				if ws.Path == req.Workspace {
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(ws)
+					return
+				}
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+
+		case "fetch":
+			result, err := s.workspaces.FetchRemote(workspace)
+			if err != nil {
+				errMsg := err.Error()
+				if strings.Contains(errMsg, "not found") {
+					http.Error(w, errMsg, http.StatusNotFound)
+				} else if strings.Contains(errMsg, "not a git repository") {
+					http.Error(w, errMsg, http.StatusBadRequest)
+				} else {
+					http.Error(w, errMsg, http.StatusInternalServerError)
+				}
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(result)
+
+		default:
+			http.Error(w, "invalid action: must be 'switch' or 'fetch'", http.StatusBadRequest)
+		}
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}

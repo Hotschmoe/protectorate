@@ -312,3 +312,132 @@ func runGitCommand(wsPath string, args ...string) (string, error) {
 	}
 	return strings.TrimSpace(string(out)), nil
 }
+
+// IsWorkspaceInUse checks if workspace is mounted to a running sleeve
+func (wm *WorkspaceManager) IsWorkspaceInUse(wsPath string) (bool, string) {
+	sleeves := wm.sleeveGetter()
+	for _, sl := range sleeves {
+		if sl.Workspace == wsPath {
+			return true, sl.Name
+		}
+	}
+	return false, ""
+}
+
+// ListBranches returns local and remote branches for a workspace
+func (wm *WorkspaceManager) ListBranches(wsPath string) (*protocol.BranchListResponse, error) {
+	gitDir := filepath.Join(wsPath, ".git")
+	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("workspace is not a git repository")
+	}
+
+	resp := &protocol.BranchListResponse{
+		Local:  []string{},
+		Remote: []string{},
+	}
+
+	// Get current branch
+	branch, _ := getGitBranch(wsPath)
+	resp.Current = branch
+
+	// Get local branches
+	localOut, err := runGitCommand(wsPath, "branch", "--list", "--format=%(refname:short)")
+	if err == nil && localOut != "" {
+		for _, b := range strings.Split(localOut, "\n") {
+			b = strings.TrimSpace(b)
+			if b != "" {
+				resp.Local = append(resp.Local, b)
+			}
+		}
+	}
+
+	// Get remote branches
+	remoteOut, err := runGitCommand(wsPath, "branch", "-r", "--format=%(refname:short)")
+	if err == nil && remoteOut != "" {
+		for _, b := range strings.Split(remoteOut, "\n") {
+			b = strings.TrimSpace(b)
+			if b != "" && !strings.HasSuffix(b, "/HEAD") {
+				resp.Remote = append(resp.Remote, b)
+			}
+		}
+	}
+
+	return resp, nil
+}
+
+// SwitchBranch changes the current branch (validates not in use, clean tree)
+func (wm *WorkspaceManager) SwitchBranch(wsPath, branch string) error {
+	// Check workspace exists
+	if _, err := os.Stat(wsPath); os.IsNotExist(err) {
+		return fmt.Errorf("workspace not found")
+	}
+
+	// Check it's a git repository
+	gitDir := filepath.Join(wsPath, ".git")
+	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+		return fmt.Errorf("workspace is not a git repository")
+	}
+
+	// Check not in use
+	if inUse, sleeveName := wm.IsWorkspaceInUse(wsPath); inUse {
+		return fmt.Errorf("workspace in use by sleeve: %s", sleeveName)
+	}
+
+	// Check clean working tree
+	uncommitted := getGitUncommittedCount(wsPath)
+	if uncommitted > 0 {
+		return fmt.Errorf("workspace has uncommitted changes")
+	}
+
+	// For remote branches (origin/xxx), check out tracking branch
+	checkoutTarget := branch
+	if strings.HasPrefix(branch, "origin/") {
+		localBranch := strings.TrimPrefix(branch, "origin/")
+		// Try to checkout the local branch if it exists, or create tracking branch
+		_, err := runGitCommand(wsPath, "checkout", localBranch)
+		if err != nil {
+			// Create tracking branch
+			_, err = runGitCommand(wsPath, "checkout", "-b", localBranch, "--track", branch)
+			if err != nil {
+				return fmt.Errorf("git error: failed to checkout branch %s", branch)
+			}
+		}
+		return nil
+	}
+
+	// Execute checkout for local branches
+	_, err := runGitCommand(wsPath, "checkout", checkoutTarget)
+	if err != nil {
+		return fmt.Errorf("git error: failed to checkout branch %s", branch)
+	}
+
+	return nil
+}
+
+// FetchRemote fetches from origin
+func (wm *WorkspaceManager) FetchRemote(wsPath string) (*protocol.FetchResult, error) {
+	// Check workspace exists
+	if _, err := os.Stat(wsPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("workspace not found")
+	}
+
+	// Check it's a git repository
+	gitDir := filepath.Join(wsPath, ".git")
+	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("workspace is not a git repository")
+	}
+
+	// Run git fetch origin
+	_, err := runGitCommand(wsPath, "fetch", "origin")
+	if err != nil {
+		return &protocol.FetchResult{
+			Success: false,
+			Message: "git fetch failed",
+		}, nil
+	}
+
+	return &protocol.FetchResult{
+		Success: true,
+		Message: "Fetched from origin",
+	}, nil
+}

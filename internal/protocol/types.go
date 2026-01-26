@@ -58,3 +58,22 @@ type WorkspaceGitInfo struct {
 	LastCommitMsg    string `json:"last_commit_msg,omitempty"`
 	LastCommitTime   string `json:"last_commit_time,omitempty"`
 }
+
+// BranchListResponse contains available branches for a workspace
+type BranchListResponse struct {
+	Current string   `json:"current"`
+	Local   []string `json:"local"`
+	Remote  []string `json:"remote"`
+}
+
+// SwitchBranchRequest is the request body for switching branches
+type SwitchBranchRequest struct {
+	Workspace string `json:"workspace"`
+	Branch    string `json:"branch"`
+}
+
+// FetchResult contains the result of a git fetch operation
+type FetchResult struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+}

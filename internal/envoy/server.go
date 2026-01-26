@@ -57,6 +57,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/docker/networks", s.handleDockerNetworks)
 	mux.HandleFunc("/api/workspaces", s.handleWorkspaces)
 	mux.HandleFunc("/api/workspaces/clone", s.handleCloneWorkspace)
+	mux.HandleFunc("/api/workspaces/branches", s.handleWorkspaceBranches)
 	mux.HandleFunc("/api/sleeves", s.handleSleeves)
 	mux.HandleFunc("/api/sleeves/", s.handleSleeveByName)
 	mux.HandleFunc("/sleeves/", s.handleSleeveTerminal)
