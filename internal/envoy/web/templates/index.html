@@ -306,6 +306,16 @@
             display: flex;
             gap: 0.25rem;
         }
+        .fetch-indicator {
+            color: #6e7681;
+            font-size: 0.85rem;
+            margin-left: 1rem;
+            animation: blink 1s ease-in-out infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
     </style>
 </head>
 <body>
@@ -384,7 +394,10 @@
             <div class="panel full-width">
                 <div class="panel-header">
                     <span class="panel-title">Workspaces</span>
-                    <button class="btn" onclick="showCloneModal()">+ Clone from Git</button>
+                    <div style="display: flex; align-items: center;">
+                        <button class="btn" onclick="showCloneModal()">+ Clone from Git</button>
+                        <span id="fetch-indicator" class="fetch-indicator" style="display: none;">fetching...</span>
+                    </div>
                 </div>
                 <div class="panel-body">
                     <table id="workspaces-table">
@@ -565,6 +578,9 @@
             }
             lastFetchAllTime = now;
 
+            const indicator = document.getElementById('fetch-indicator');
+            indicator.style.display = 'inline';
+
             try {
                 await fetch('/api/workspaces/branches?action=fetch-all', {
                     method: 'POST',
@@ -573,6 +589,8 @@
                 refreshWorkspacesTable();
             } catch (e) {
                 console.error('Fetch all failed:', e);
+            } finally {
+                indicator.style.display = 'none';
             }
         }
 
