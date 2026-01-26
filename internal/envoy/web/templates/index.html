@@ -889,7 +889,7 @@
         }
 
         function formatWorkspaceActions(ws) {
-            const isGitRepo = ws.git !== null;
+            const isGitRepo = !!ws.git;
             const canSwitch = isGitRepo && !ws.in_use && !ws.git.is_dirty;
             const switchDisabled = !canSwitch ? 'disabled' : '';
             const fetchDisabled = !isGitRepo ? 'disabled' : '';
