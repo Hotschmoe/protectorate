@@ -531,6 +531,8 @@
         let currentConnection = null;
         let currentCloneJobId = null;
         let clonePollingInterval = null;
+        let lastFetchAllTime = 0;
+        const FETCH_ALL_THROTTLE_MS = 60000;
 
         const TTYD_INPUT = 48;
         const TTYD_RESIZE = 49;
@@ -552,6 +554,25 @@
 
             if (tabName === 'workspaces') {
                 refreshWorkspacesTable();
+                triggerFetchAllThrottled();
+            }
+        }
+
+        async function triggerFetchAllThrottled() {
+            const now = Date.now();
+            if (now - lastFetchAllTime < FETCH_ALL_THROTTLE_MS) {
+                return;
+            }
+            lastFetchAllTime = now;
+
+            try {
+                await fetch('/api/workspaces/branches?action=fetch-all', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                refreshWorkspacesTable();
+            } catch (e) {
+                console.error('Fetch all failed:', e);
             }
         }
 

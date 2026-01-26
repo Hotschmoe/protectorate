@@ -1,6 +1,7 @@
 package envoy
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -479,4 +480,59 @@ func (wm *WorkspaceManager) PullRemote(wsPath string) (*protocol.FetchResult, er
 		Success: true,
 		Message: "Pulled from origin",
 	}, nil
+}
+
+// FetchAllRemotes fetches from origin for all git workspaces (parallel, with timeout)
+func (wm *WorkspaceManager) FetchAllRemotes() *protocol.FetchResult {
+	workspaces, err := wm.List()
+	if err != nil {
+		return &protocol.FetchResult{Success: false, Message: "failed to list workspaces"}
+	}
+
+	var gitWorkspaces []string
+	for _, ws := range workspaces {
+		if ws.Git != nil {
+			gitWorkspaces = append(gitWorkspaces, ws.Path)
+		}
+	}
+
+	if len(gitWorkspaces) == 0 {
+		return &protocol.FetchResult{Success: true, Message: "no git workspaces to fetch"}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	for _, wsPath := range gitWorkspaces {
+		wg.Add(1)
+		go func(path string) {
+			defer wg.Done()
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				runGitCommand(path, "fetch", "origin")
+			}
+		}(wsPath)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return &protocol.FetchResult{
+			Success: true,
+			Message: fmt.Sprintf("fetched %d workspaces", len(gitWorkspaces)),
+		}
+	case <-ctx.Done():
+		return &protocol.FetchResult{
+			Success: true,
+			Message: fmt.Sprintf("fetched workspaces (some timed out)"),
+		}
+	}
 }

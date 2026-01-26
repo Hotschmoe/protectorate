@@ -237,6 +237,16 @@ func (s *Server) handleCloneWorkspace(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleWorkspaceBranches(w http.ResponseWriter, r *http.Request) {
 	workspace := r.URL.Query().Get("workspace")
+	action := r.URL.Query().Get("action")
+
+	// fetch-all doesn't require a workspace parameter
+	if action == "fetch-all" && r.Method == http.MethodPost {
+		result := s.workspaces.FetchAllRemotes()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+		return
+	}
+
 	if workspace == "" {
 		http.Error(w, "workspace parameter required", http.StatusBadRequest)
 		return
