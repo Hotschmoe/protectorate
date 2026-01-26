@@ -551,6 +551,91 @@ func (wm *WorkspaceManager) PullRemote(wsPath string) (*protocol.FetchResult, er
 	}, nil
 }
 
+// CommitAll stages and commits all changes with a simple message
+func (wm *WorkspaceManager) CommitAll(wsPath, message string) (*protocol.FetchResult, error) {
+	if _, err := os.Stat(wsPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("workspace not found")
+	}
+
+	gitDir := filepath.Join(wsPath, ".git")
+	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("workspace is not a git repository")
+	}
+
+	if inUse, sleeveName := wm.IsWorkspaceInUse(wsPath); inUse {
+		return nil, fmt.Errorf("workspace in use by sleeve: %s", sleeveName)
+	}
+
+	uncommitted := getGitUncommittedCount(wsPath)
+	if uncommitted == 0 {
+		return &protocol.FetchResult{
+			Success: false,
+			Message: "no changes to commit",
+		}, nil
+	}
+
+	// Stage all changes
+	_, err := runGitCommand(wsPath, "add", "-A")
+	if err != nil {
+		return &protocol.FetchResult{
+			Success: false,
+			Message: "failed to stage changes",
+		}, nil
+	}
+
+	// Commit
+	_, err = runGitCommand(wsPath, "commit", "-m", message)
+	if err != nil {
+		return &protocol.FetchResult{
+			Success: false,
+			Message: "commit failed",
+		}, nil
+	}
+
+	return &protocol.FetchResult{
+		Success: true,
+		Message: "committed changes",
+	}, nil
+}
+
+// PushToRemote pushes commits to origin
+func (wm *WorkspaceManager) PushToRemote(wsPath string) (*protocol.FetchResult, error) {
+	if _, err := os.Stat(wsPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("workspace not found")
+	}
+
+	gitDir := filepath.Join(wsPath, ".git")
+	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("workspace is not a git repository")
+	}
+
+	if inUse, sleeveName := wm.IsWorkspaceInUse(wsPath); inUse {
+		return nil, fmt.Errorf("workspace in use by sleeve: %s", sleeveName)
+	}
+
+	// Check if there are commits to push
+	info := getGitInfo(wsPath)
+	if info == nil || info.AheadCount == 0 {
+		return &protocol.FetchResult{
+			Success: false,
+			Message: "no commits to push",
+		}, nil
+	}
+
+	_, err := runGitCommand(wsPath, "push")
+	if err != nil {
+		return &protocol.FetchResult{
+			Success: false,
+			Message: "push failed",
+		}, nil
+	}
+
+	return &protocol.FetchResult{
+		Success: true,
+		Message: "pushed to origin",
+	}, nil
+}
+
 // FetchAllRemotes fetches from origin for all git workspaces (parallel, with timeout)
 func (wm *WorkspaceManager) FetchAllRemotes() *protocol.FetchResult {
 	workspaces, err := wm.List()

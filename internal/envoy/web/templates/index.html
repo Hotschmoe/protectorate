@@ -994,9 +994,14 @@
             const isGitRepo = !!ws.git;
             const canSwitch = isGitRepo && !ws.in_use && !ws.git.is_dirty;
             const canPull = isGitRepo && !ws.in_use && !ws.git.is_dirty && ws.git.ahead_count === 0 && ws.git.behind_count > 0;
+            const canCommit = isGitRepo && !ws.in_use && ws.git.is_dirty;
+            const canPush = isGitRepo && !ws.in_use && ws.git.ahead_count > 0;
+
             const switchDisabled = !canSwitch ? 'disabled' : '';
             const fetchDisabled = !isGitRepo ? 'disabled' : '';
             const pullDisabled = !canPull ? 'disabled' : '';
+            const commitDisabled = !canCommit ? 'disabled' : '';
+            const pushDisabled = !canPush ? 'disabled' : '';
 
             let switchTitle = 'Switch branch';
             if (!isGitRepo) {
@@ -1020,16 +1025,40 @@
                 pullTitle = 'Already up to date';
             }
 
+            let commitTitle = 'Commit all changes';
+            if (!isGitRepo) {
+                commitTitle = 'Not a git repository';
+            } else if (ws.in_use) {
+                commitTitle = 'Workspace in use by ' + ws.sleeve_name;
+            } else if (!ws.git.is_dirty) {
+                commitTitle = 'No uncommitted changes';
+            }
+
+            let pushTitle = 'Push to remote';
+            if (!isGitRepo) {
+                pushTitle = 'Not a git repository';
+            } else if (ws.in_use) {
+                pushTitle = 'Workspace in use by ' + ws.sleeve_name;
+            } else if (ws.git.ahead_count === 0) {
+                pushTitle = 'No commits to push';
+            }
+
             const escapedPath = ws.path.replace(/'/g, "\\'");
             const escapedName = ws.name.replace(/'/g, "\\'");
 
             return `<div class="action-buttons">
+                <button class="btn btn-secondary btn-small" ${commitDisabled} title="${commitTitle}"
+                        onclick="commitChanges('${escapedPath}', this)">Commit</button>
+                <button class="btn btn-secondary btn-small" ${pushDisabled} title="${pushTitle}"
+                        onclick="pushChanges('${escapedPath}', this)">Push</button>
                 <button class="btn btn-secondary btn-small" ${switchDisabled} title="${switchTitle}"
                         onclick="showSwitchModal('${escapedPath}', '${escapedName}')">Switch</button>
                 <button class="btn btn-secondary btn-small" ${fetchDisabled} title="${isGitRepo ? 'Fetch from remote' : 'Not a git repository'}"
                         onclick="fetchRemote('${escapedPath}', this)">Fetch</button>
                 <button class="btn btn-secondary btn-small" ${pullDisabled} title="${pullTitle}"
                         onclick="pullRemote('${escapedPath}', this)">Pull</button>
+                <button class="btn btn-secondary btn-small" disabled title="Open in IDE (coming soon)"
+                        onclick="viewWorkspace('${escapedPath}')">View</button>
             </div>`;
         }
 
@@ -1251,6 +1280,94 @@
                 btn.textContent = originalText;
                 btn.disabled = false;
             }
+        }
+
+        async function commitChanges(wsPath, btn) {
+            const originalText = btn.textContent;
+            btn.textContent = 'Committing...';
+            btn.disabled = true;
+
+            try {
+                const resp = await fetch(`/api/workspaces/branches?workspace=${encodeURIComponent(wsPath)}&action=commit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    alert('Commit failed: ' + err);
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    return;
+                }
+
+                const result = await resp.json();
+                if (!result.success) {
+                    alert('Commit failed: ' + (result.message || 'unknown error'));
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    return;
+                }
+
+                btn.textContent = 'Done!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    refreshWorkspacesTable();
+                }, 1000);
+            } catch (e) {
+                alert('Commit failed: ' + e.message);
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function pushChanges(wsPath, btn) {
+            const originalText = btn.textContent;
+            btn.textContent = 'Pushing...';
+            btn.disabled = true;
+
+            try {
+                const resp = await fetch(`/api/workspaces/branches?workspace=${encodeURIComponent(wsPath)}&action=push`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    alert('Push failed: ' + err);
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    return;
+                }
+
+                const result = await resp.json();
+                if (!result.success) {
+                    alert('Push failed: ' + (result.message || 'unknown error'));
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    return;
+                }
+
+                btn.textContent = 'Done!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    refreshWorkspacesTable();
+                }, 1000);
+            } catch (e) {
+                alert('Push failed: ' + e.message);
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // TODO: Implement workspace view - options to consider:
+        // - LazyGit in a terminal modal
+        // - VS Code in a container (code-server)
+        // - Web-based file browser
+        function viewWorkspace(wsPath) {
+            alert('View workspace coming soon. Options: LazyGit, VS Code (code-server), or web file browser.');
         }
 
         function showCstackInitModal(wsPath, wsName) {
