@@ -527,6 +527,10 @@
 
     <div id="cstack-init-modal" class="modal">
         <div class="modal-content">
+            <div id="cstack-loading" class="spawn-loading">
+                <div class="spinner"></div>
+                <div class="cstack-loading-text">Initializing cstack...</div>
+            </div>
             <h2 class="modal-title">Initialize Cstack</h2>
             <p>Workspace: <strong id="cstack-init-ws-name"></strong></p>
 
@@ -1246,6 +1250,17 @@
         function hideCstackInitModal() {
             document.getElementById('cstack-init-modal').classList.remove('active');
             document.getElementById('cstack-init-form').reset();
+            document.getElementById('cstack-init-error').classList.add('hidden');
+            hideCstackLoading();
+        }
+
+        function showCstackLoading(msg) {
+            document.querySelector('.cstack-loading-text').textContent = msg || 'Initializing cstack...';
+            document.getElementById('cstack-loading').classList.add('active');
+        }
+
+        function hideCstackLoading() {
+            document.getElementById('cstack-loading').classList.remove('active');
         }
 
         async function initCstack(e) {
@@ -1254,8 +1269,10 @@
             const mode = document.querySelector('input[name="cstack-mode"]:checked').value;
             const btn = document.getElementById('cstack-init-btn');
 
-            btn.disabled = true;
-            btn.textContent = 'Initializing...';
+            const loadingMsg = mode === 'interview'
+                ? 'Initializing cstack (interview mode)...'
+                : 'Initializing cstack...';
+            showCstackLoading(loadingMsg);
             document.getElementById('cstack-init-error').classList.add('hidden');
 
             try {
@@ -1271,23 +1288,21 @@
                 const result = await resp.json();
 
                 if (!result.success) {
+                    hideCstackLoading();
                     document.getElementById('cstack-init-error').textContent = result.error || 'Init failed';
                     document.getElementById('cstack-init-error').classList.remove('hidden');
-                    btn.disabled = false;
-                    btn.textContent = 'Initialize';
                     return;
                 }
 
+                hideCstackLoading();
                 hideCstackInitModal();
                 refreshWorkspacesTable();
 
             } catch (e) {
+                hideCstackLoading();
                 document.getElementById('cstack-init-error').textContent = e.message;
                 document.getElementById('cstack-init-error').classList.remove('hidden');
             }
-
-            btn.disabled = false;
-            btn.textContent = 'Initialize';
         }
 
         function updateWorkspaceSelect() {
