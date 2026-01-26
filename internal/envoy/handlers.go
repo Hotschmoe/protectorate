@@ -569,6 +569,16 @@ func checkGitIdentity() protocol.DoctorCheck {
 			Suggestion: "Set GIT_COMMITTER_NAME and GIT_COMMITTER_EMAIL in .env",
 		}
 	}
+
+	if name == "Protectorate" || email == "protectorate@local" {
+		return protocol.DoctorCheck{
+			Name:       "Git Identity",
+			Status:     "warning",
+			Message:    fmt.Sprintf("Using default identity: %s <%s>", name, email),
+			Suggestion: "Set GIT_COMMITTER_NAME and GIT_COMMITTER_EMAIL to your real identity in .env",
+		}
+	}
+
 	return protocol.DoctorCheck{
 		Name:    "Git Identity",
 		Status:  "pass",
