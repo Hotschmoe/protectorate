@@ -326,8 +326,27 @@ func (s *Server) handleWorkspaceBranches(w http.ResponseWriter, r *http.Request)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(result)
 
+		case "pull":
+			result, err := s.workspaces.PullRemote(workspace)
+			if err != nil {
+				errMsg := err.Error()
+				if strings.Contains(errMsg, "not found") {
+					http.Error(w, errMsg, http.StatusNotFound)
+				} else if strings.Contains(errMsg, "in use") || strings.Contains(errMsg, "uncommitted") {
+					http.Error(w, errMsg, http.StatusConflict)
+				} else if strings.Contains(errMsg, "not a git repository") {
+					http.Error(w, errMsg, http.StatusBadRequest)
+				} else {
+					http.Error(w, errMsg, http.StatusInternalServerError)
+				}
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(result)
+
 		default:
-			http.Error(w, "invalid action: must be 'switch' or 'fetch'", http.StatusBadRequest)
+			http.Error(w, "invalid action: must be 'switch', 'fetch', or 'pull'", http.StatusBadRequest)
 		}
 
 	default:

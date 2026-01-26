@@ -441,3 +441,42 @@ func (wm *WorkspaceManager) FetchRemote(wsPath string) (*protocol.FetchResult, e
 		Message: "Fetched from origin",
 	}, nil
 }
+
+// PullRemote pulls from origin (fast-forward only)
+func (wm *WorkspaceManager) PullRemote(wsPath string) (*protocol.FetchResult, error) {
+	// Check workspace exists
+	if _, err := os.Stat(wsPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("workspace not found")
+	}
+
+	// Check it's a git repository
+	gitDir := filepath.Join(wsPath, ".git")
+	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("workspace is not a git repository")
+	}
+
+	// Check not in use
+	if inUse, sleeveName := wm.IsWorkspaceInUse(wsPath); inUse {
+		return nil, fmt.Errorf("workspace in use by sleeve: %s", sleeveName)
+	}
+
+	// Check clean working tree
+	uncommitted := getGitUncommittedCount(wsPath)
+	if uncommitted > 0 {
+		return nil, fmt.Errorf("workspace has uncommitted changes")
+	}
+
+	// Run git pull --ff-only
+	_, err := runGitCommand(wsPath, "pull", "--ff-only")
+	if err != nil {
+		return &protocol.FetchResult{
+			Success: false,
+			Message: "pull failed: not a fast-forward",
+		}, nil
+	}
+
+	return &protocol.FetchResult{
+		Success: true,
+		Message: "Pulled from origin",
+	}, nil
+}

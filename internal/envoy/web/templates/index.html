@@ -891,8 +891,10 @@
         function formatWorkspaceActions(ws) {
             const isGitRepo = !!ws.git;
             const canSwitch = isGitRepo && !ws.in_use && !ws.git.is_dirty;
+            const canPull = isGitRepo && !ws.in_use && !ws.git.is_dirty && ws.git.ahead_count === 0 && ws.git.behind_count > 0;
             const switchDisabled = !canSwitch ? 'disabled' : '';
             const fetchDisabled = !isGitRepo ? 'disabled' : '';
+            const pullDisabled = !canPull ? 'disabled' : '';
 
             let switchTitle = 'Switch branch';
             if (!isGitRepo) {
@@ -903,6 +905,19 @@
                 switchTitle = 'Has uncommitted changes';
             }
 
+            let pullTitle = 'Pull from remote';
+            if (!isGitRepo) {
+                pullTitle = 'Not a git repository';
+            } else if (ws.in_use) {
+                pullTitle = 'Workspace in use by ' + ws.sleeve_name;
+            } else if (ws.git.is_dirty) {
+                pullTitle = 'Has uncommitted changes';
+            } else if (ws.git.ahead_count > 0) {
+                pullTitle = 'Has local commits - push first';
+            } else if (ws.git.behind_count === 0) {
+                pullTitle = 'Already up to date';
+            }
+
             const escapedPath = ws.path.replace(/'/g, "\\'");
             const escapedName = ws.name.replace(/'/g, "\\'");
 
@@ -911,6 +926,8 @@
                         onclick="showSwitchModal('${escapedPath}', '${escapedName}')">Switch</button>
                 <button class="btn btn-secondary btn-small" ${fetchDisabled} title="${isGitRepo ? 'Fetch from remote' : 'Not a git repository'}"
                         onclick="fetchRemote('${escapedPath}', this)">Fetch</button>
+                <button class="btn btn-secondary btn-small" ${pullDisabled} title="${pullTitle}"
+                        onclick="pullRemote('${escapedPath}', this)">Pull</button>
             </div>`;
         }
 
@@ -1052,6 +1069,47 @@
                 }, 1000);
             } catch (e) {
                 alert('Fetch failed: ' + e.message);
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function pullRemote(wsPath, btn) {
+            const originalText = btn.textContent;
+            btn.textContent = 'Pulling...';
+            btn.disabled = true;
+
+            try {
+                const resp = await fetch(`/api/workspaces/branches?workspace=${encodeURIComponent(wsPath)}&action=pull`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ workspace: wsPath })
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    alert('Pull failed: ' + err);
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    return;
+                }
+
+                const result = await resp.json();
+                if (!result.success) {
+                    alert('Pull failed: ' + (result.message || 'unknown error'));
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    return;
+                }
+
+                btn.textContent = 'Done!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    refreshWorkspacesTable();
+                }, 1000);
+            } catch (e) {
+                alert('Pull failed: ' + e.message);
                 btn.textContent = originalText;
                 btn.disabled = false;
             }
