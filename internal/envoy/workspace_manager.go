@@ -583,12 +583,17 @@ func (wm *WorkspaceManager) CommitAll(wsPath, message string) (*protocol.FetchRe
 		}, nil
 	}
 
-	// Commit
-	_, err = runGitCommand(wsPath, "commit", "-m", message)
-	if err != nil {
+	// Commit with envoy identity
+	cmd := exec.Command("git",
+		"-c", "safe.directory="+wsPath,
+		"-C", wsPath,
+		"-c", "user.email=envoy@protectorate.local",
+		"-c", "user.name=Protectorate Envoy",
+		"commit", "-m", message)
+	if out, err := cmd.CombinedOutput(); err != nil {
 		return &protocol.FetchResult{
 			Success: false,
-			Message: "commit failed",
+			Message: "commit failed: " + string(out),
 		}, nil
 	}
 
