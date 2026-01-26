@@ -101,3 +101,11 @@ type FetchResult struct {
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`
 }
+
+// DoctorCheck represents a single diagnostic check result
+type DoctorCheck struct {
+	Name       string `json:"name"`
+	Status     string `json:"status"` // "pass", "warning", "fail"
+	Message    string `json:"message"`
+	Suggestion string `json:"suggestion,omitempty"`
+}

@@ -53,6 +53,7 @@ func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
 func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
+	mux.HandleFunc("/api/doctor", s.handleDoctor)
 	mux.HandleFunc("/api/docker/containers", s.handleDockerContainers)
 	mux.HandleFunc("/api/docker/networks", s.handleDockerNetworks)
 	mux.HandleFunc("/api/workspaces", s.handleWorkspaces)

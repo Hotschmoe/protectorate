@@ -1,10 +1,14 @@
 package envoy
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/hotschmoe/protectorate/internal/protocol"
 )
@@ -443,5 +447,160 @@ func (s *Server) handleWorkspaceBranches(w http.ResponseWriter, r *http.Request)
 
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleDoctor(w http.ResponseWriter, r *http.Request) {
+	checks := []protocol.DoctorCheck{}
+
+	checks = append(checks, checkSSHAgent())
+	checks = append(checks, checkClaudeCredentials())
+	checks = append(checks, s.checkDocker())
+	checks = append(checks, checkGitIdentity())
+	checks = append(checks, s.checkRavenNetwork())
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(checks)
+}
+
+func checkSSHAgent() protocol.DoctorCheck {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "ssh-add", "-l")
+	output, err := cmd.CombinedOutput()
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			return protocol.DoctorCheck{
+				Name:       "SSH Agent",
+				Status:     "fail",
+				Message:    fmt.Sprintf("Failed to run ssh-add: %v", err),
+				Suggestion: "Ensure SSH agent is running: eval $(ssh-agent) && ssh-add",
+			}
+		}
+	}
+
+	switch exitCode {
+	case 0:
+		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+		keyCount := 0
+		for _, line := range lines {
+			if strings.TrimSpace(line) != "" {
+				keyCount++
+			}
+		}
+		return protocol.DoctorCheck{
+			Name:    "SSH Agent",
+			Status:  "pass",
+			Message: fmt.Sprintf("SSH agent running with %d key(s) loaded", keyCount),
+		}
+	case 1:
+		return protocol.DoctorCheck{
+			Name:       "SSH Agent",
+			Status:     "warning",
+			Message:    "SSH agent running but no keys loaded",
+			Suggestion: "Run: ssh-add ~/.ssh/id_ed25519 (or your key path)",
+		}
+	default:
+		return protocol.DoctorCheck{
+			Name:       "SSH Agent",
+			Status:     "fail",
+			Message:    "SSH agent not running or not accessible",
+			Suggestion: "Run: eval $(ssh-agent) && ssh-add",
+		}
+	}
+}
+
+func checkClaudeCredentials() protocol.DoctorCheck {
+	credPath := "/home/claude/.claude/.credentials.json"
+	if _, err := os.Stat(credPath); err == nil {
+		return protocol.DoctorCheck{
+			Name:    "Claude Credentials",
+			Status:  "pass",
+			Message: "Credentials file found",
+		}
+	}
+	return protocol.DoctorCheck{
+		Name:       "Claude Credentials",
+		Status:     "fail",
+		Message:    "Credentials file not found",
+		Suggestion: "Run 'claude auth login' in a sleeve to authenticate",
+	}
+}
+
+func (s *Server) checkDocker() protocol.DoctorCheck {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := s.docker.cli.Ping(ctx); err != nil {
+		return protocol.DoctorCheck{
+			Name:       "Docker",
+			Status:     "fail",
+			Message:    fmt.Sprintf("Docker daemon unreachable: %v", err),
+			Suggestion: "Ensure Docker is running and accessible",
+		}
+	}
+	return protocol.DoctorCheck{
+		Name:    "Docker",
+		Status:  "pass",
+		Message: "Docker daemon reachable",
+	}
+}
+
+func checkGitIdentity() protocol.DoctorCheck {
+	name := os.Getenv("GIT_COMMITTER_NAME")
+	email := os.Getenv("GIT_COMMITTER_EMAIL")
+
+	if name == "" || email == "" {
+		missing := []string{}
+		if name == "" {
+			missing = append(missing, "GIT_COMMITTER_NAME")
+		}
+		if email == "" {
+			missing = append(missing, "GIT_COMMITTER_EMAIL")
+		}
+		return protocol.DoctorCheck{
+			Name:       "Git Identity",
+			Status:     "fail",
+			Message:    fmt.Sprintf("%s not set", strings.Join(missing, " and ")),
+			Suggestion: "Set GIT_COMMITTER_NAME and GIT_COMMITTER_EMAIL in .env",
+		}
+	}
+	return protocol.DoctorCheck{
+		Name:    "Git Identity",
+		Status:  "pass",
+		Message: fmt.Sprintf("Identity configured: %s <%s>", name, email),
+	}
+}
+
+func (s *Server) checkRavenNetwork() protocol.DoctorCheck {
+	networks, err := s.docker.ListNetworks()
+	if err != nil {
+		return protocol.DoctorCheck{
+			Name:       "Raven Network",
+			Status:     "fail",
+			Message:    fmt.Sprintf("Failed to list networks: %v", err),
+			Suggestion: "Check Docker connectivity",
+		}
+	}
+
+	for _, n := range networks {
+		if n.Name == "raven" {
+			return protocol.DoctorCheck{
+				Name:    "Raven Network",
+				Status:  "pass",
+				Message: "Network 'raven' exists",
+			}
+		}
+	}
+
+	return protocol.DoctorCheck{
+		Name:       "Raven Network",
+		Status:     "fail",
+		Message:    "Network 'raven' not found",
+		Suggestion: "Run: docker network create raven",
 	}
 }
