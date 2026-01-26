@@ -8,6 +8,13 @@ chown -R claude:claude /home/claude/workspaces 2>/dev/null || true
 chown -R claude:claude /home/claude/.claude 2>/dev/null || true
 mkdir -p /app/web 2>/dev/null || true
 
+# SSH agent is mounted from host via SSH_AUTH_SOCK env var
+# User must have ssh-agent running: eval $(ssh-agent) && ssh-add
+if [ -S /ssh-agent ]; then
+    mkdir -p /root/.ssh
+    ssh-keyscan github.com gitlab.com >> /root/.ssh/known_hosts 2>/dev/null
+fi
+
 # Copy read-only mounted settings to writable location
 if [ -f /etc/claude/settings.json ]; then
     cp /etc/claude/settings.json /home/claude/.claude/settings.json

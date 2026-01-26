@@ -40,8 +40,9 @@ services:
       # Git config from host (for commit identity)
       - ${HOME}/.gitconfig:/root/.gitconfig:ro
 
-      # SSH keys from host (for git push - repos must use SSH URLs)
-      - ${HOME}/.ssh:/root/.ssh:ro
+      # SSH agent from host (for git push - repos must use SSH URLs)
+      # Requires: eval $(ssh-agent) && ssh-add (on host)
+      - ${SSH_AUTH_SOCK}:/ssh-agent:ro
 
       # Workspaces (all sleeve directories visible here)
       - ./workspaces:/home/claude/workspaces
@@ -57,6 +58,7 @@ services:
       - GIT_CLONE_PROTOCOL=${GIT_CLONE_PROTOCOL:-ssh}
       - GIT_COMMITTER_NAME=${GIT_COMMITTER_NAME:-}
       - GIT_COMMITTER_EMAIL=${GIT_COMMITTER_EMAIL:-}
+      - SSH_AUTH_SOCK=/ssh-agent
     networks:
       - raven
     user: root
