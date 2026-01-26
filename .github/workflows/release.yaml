@@ -79,14 +79,13 @@ jobs:
           context: .
           file: ./containers/envoy/Dockerfile
           push: true
+          no-cache: true
           build-args: |
             BASE_IMAGE=${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-base
             BASE_TAG=${{ steps.version.outputs.version }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-envoy:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-envoy:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       # Build and push sleeve (uses base from ghcr.io)
       - name: Build and push sleeve
@@ -95,14 +94,13 @@ jobs:
           context: ./containers/sleeve
           file: ./containers/sleeve/Dockerfile
           push: true
+          no-cache: true
           build-args: |
             BASE_IMAGE=${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-base
             BASE_TAG=${{ steps.version.outputs.version }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-sleeve:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-sleeve:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Summary
         run: |
