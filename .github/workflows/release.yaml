@@ -5,9 +5,10 @@
 #   - Manual workflow dispatch
 #
 # Builds:
+#   - ghcr.io/hotschmoe/protectorate-base:vX.X.X (internal dependency)
 #   - ghcr.io/hotschmoe/protectorate-envoy:vX.X.X
 #   - ghcr.io/hotschmoe/protectorate-sleeve:vX.X.X
-#   - Both also tagged as :latest
+#   - All also tagged as :latest
 #
 name: Release
 
@@ -58,38 +59,45 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Building version: $VERSION"
 
-      # Build base image first (not pushed, used as build dependency)
-      - name: Build base image
+      # Build and push base image first (needed by envoy and sleeve)
+      - name: Build and push base image
         uses: docker/build-push-action@v5
         with:
           context: ./containers/base
           file: ./containers/base/Dockerfile
-          push: false
-          load: true
-          tags: protectorate/base:latest
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-base:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-base:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Build and push envoy
+      # Build and push envoy (uses base from ghcr.io)
       - name: Build and push envoy
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./containers/envoy/Dockerfile
           push: true
+          build-args: |
+            BASE_IMAGE=${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-base
+            BASE_TAG=${{ steps.version.outputs.version }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-envoy:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-envoy:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Build and push sleeve
+      # Build and push sleeve (uses base from ghcr.io)
       - name: Build and push sleeve
         uses: docker/build-push-action@v5
         with:
           context: ./containers/sleeve
           file: ./containers/sleeve/Dockerfile
           push: true
+          build-args: |
+            BASE_IMAGE=${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-base
+            BASE_TAG=${{ steps.version.outputs.version }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-sleeve:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-sleeve:latest
@@ -101,6 +109,7 @@ jobs:
           echo "## Release ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Images pushed:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-base:${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-envoy:${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ env.REGISTRY }}/${{ env.OWNER }}/protectorate-sleeve:${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
