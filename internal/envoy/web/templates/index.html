@@ -309,7 +309,7 @@
         .fetch-indicator {
             color: #6e7681;
             font-size: 0.85rem;
-            margin-left: 1rem;
+            margin-right: 1rem;
             animation: blink 1s ease-in-out infinite;
         }
         @keyframes blink {
@@ -395,8 +395,8 @@
                 <div class="panel-header">
                     <span class="panel-title">Workspaces</span>
                     <div style="display: flex; align-items: center;">
-                        <button class="btn" onclick="showCloneModal()">+ Clone from Git</button>
                         <span id="fetch-indicator" class="fetch-indicator" style="display: none;">fetching...</span>
+                        <button class="btn" onclick="showCloneModal()">+ Clone from Git</button>
                     </div>
                 </div>
                 <div class="panel-body">
@@ -580,6 +580,8 @@
 
             const indicator = document.getElementById('fetch-indicator');
             indicator.style.display = 'inline';
+            const startTime = Date.now();
+            const minDisplayMs = 1500;
 
             try {
                 await fetch('/api/workspaces/branches?action=fetch-all', {
@@ -590,7 +592,13 @@
             } catch (e) {
                 console.error('Fetch all failed:', e);
             } finally {
-                indicator.style.display = 'none';
+                const elapsed = Date.now() - startTime;
+                const remaining = minDisplayMs - elapsed;
+                if (remaining > 0) {
+                    setTimeout(() => { indicator.style.display = 'none'; }, remaining);
+                } else {
+                    indicator.style.display = 'none';
+                }
             }
         }
 
