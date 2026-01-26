@@ -45,6 +45,7 @@ services:
 
     environment:
       - DEV_MODE=true
+      - SLEEVE_IMAGE=protectorate/sleeve:latest
       - WORKSPACE_HOST_ROOT=${PWD}/workspaces
       - CREDENTIALS_HOST_PATH=${HOME}/.claude/.credentials.json
       - SETTINGS_HOST_PATH=${HOME}/.claude.json
