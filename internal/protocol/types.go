@@ -38,8 +38,23 @@ type CloneJob struct {
 
 // WorkspaceInfo represents a workspace directory
 type WorkspaceInfo struct {
-	Name       string `json:"name"`
-	Path       string `json:"path"`
-	InUse      bool   `json:"in_use"`
-	SleeveName string `json:"sleeve_name,omitempty"`
+	Name       string            `json:"name"`
+	Path       string            `json:"path"`
+	InUse      bool              `json:"in_use"`
+	SleeveName string            `json:"sleeve_name,omitempty"`
+	Git        *WorkspaceGitInfo `json:"git,omitempty"`
+}
+
+// WorkspaceGitInfo contains git repository information for a workspace
+type WorkspaceGitInfo struct {
+	Branch           string `json:"branch"`
+	IsDetached       bool   `json:"is_detached,omitempty"`
+	RemoteBranch     string `json:"remote_branch,omitempty"`
+	IsDirty          bool   `json:"is_dirty"`
+	UncommittedCount int    `json:"uncommitted_count"`
+	AheadCount       int    `json:"ahead_count"`
+	BehindCount      int    `json:"behind_count"`
+	LastCommitHash   string `json:"last_commit_hash,omitempty"`
+	LastCommitMsg    string `json:"last_commit_msg,omitempty"`
+	LastCommitTime   string `json:"last_commit_time,omitempty"`
 }

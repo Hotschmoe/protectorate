@@ -284,6 +284,15 @@
             font-size: 0.875rem;
             margin-top: 0.5rem;
         }
+        .git-branch { color: #a371f7; font-family: monospace; }
+        .git-detached { color: #d29922; font-family: monospace; }
+        .git-no-repo { color: #6e7681; }
+        .git-clean { color: #3fb950; }
+        .git-dirty { color: #f85149; }
+        .git-ahead { color: #58a6ff; }
+        .git-behind { color: #d29922; }
+        .git-commit-hash { color: #8b949e; font-family: monospace; }
+        .git-commit-time { color: #6e7681; font-size: 0.85em; }
     </style>
 </head>
 <body>
@@ -369,7 +378,9 @@
                         <thead>
                             <tr>
                                 <th>Name</th>
-                                <th>Status</th>
+                                <th>Branch</th>
+                                <th>Git Status</th>
+                                <th>Last Commit</th>
                                 <th>Sleeve</th>
                             </tr>
                         </thead>
@@ -781,25 +792,59 @@
                 emptyState.classList.add('hidden');
 
                 tbody.innerHTML = workspaces.map(ws => {
-                    let status, statusClass;
-                    if (ws.in_use) {
-                        status = 'In Use';
-                        statusClass = 'status-in-use';
-                    } else {
-                        status = 'Available';
-                        statusClass = 'status-available';
-                    }
+                    const branch = formatGitBranch(ws.git);
+                    const gitStatus = formatGitStatus(ws.git, ws.in_use);
+                    const lastCommit = formatLastCommit(ws.git);
+                    const sleeve = ws.sleeve_name || '-';
                     return `
                     <tr>
                         <td>${ws.name}</td>
-                        <td class="${statusClass}">${status}</td>
-                        <td>${ws.sleeve_name || '-'}</td>
+                        <td>${branch}</td>
+                        <td>${gitStatus}</td>
+                        <td>${lastCommit}</td>
+                        <td>${sleeve}</td>
                     </tr>
                     `;
                 }).join('');
             } catch (e) {
                 console.error('Failed to fetch workspaces:', e);
             }
+        }
+
+        function formatGitBranch(git) {
+            if (!git) return '<span class="git-no-repo">-</span>';
+            const branchClass = git.is_detached ? 'git-detached' : 'git-branch';
+            const prefix = git.is_detached ? 'detached@' : '';
+            return `<span class="${branchClass}">${prefix}${git.branch}</span>`;
+        }
+
+        function formatGitStatus(git, inUse) {
+            if (!git) return '-';
+            const parts = [];
+
+            if (git.is_dirty) {
+                parts.push(`<span class="git-dirty">${git.uncommitted_count} uncommitted</span>`);
+            } else {
+                parts.push('<span class="git-clean">Clean</span>');
+            }
+
+            if (git.ahead_count > 0 || git.behind_count > 0) {
+                const syncParts = [];
+                if (git.ahead_count > 0) syncParts.push(`${git.ahead_count} ahead`);
+                if (git.behind_count > 0) syncParts.push(`${git.behind_count} behind`);
+                const syncClass = git.behind_count > 0 ? 'git-behind' : 'git-ahead';
+                parts.push(`<span class="${syncClass}">${syncParts.join(', ')}</span>`);
+            }
+
+            return parts.join(' / ');
+        }
+
+        function formatLastCommit(git) {
+            if (!git || !git.last_commit_hash) return '-';
+            const msg = git.last_commit_msg.length > 30
+                ? git.last_commit_msg.substring(0, 30) + '...'
+                : git.last_commit_msg;
+            return `<span class="git-commit-hash">${git.last_commit_hash}</span> ${msg} <span class="git-commit-time">(${git.last_commit_time})</span>`;
         }
 
         function updateWorkspaceSelect() {
