@@ -236,6 +236,11 @@ PLUGINS_HOST_PATH=\${HOME}/.claude/plugins
 
 # Docker settings
 COMPOSE_PROJECT_NAME=protectorate
+
+# Git identity (defaults - customize in Doctor tab or edit this file)
+GIT_COMMITTER_NAME=Protectorate
+GIT_COMMITTER_EMAIL=protectorate@local
+GIT_CLONE_PROTOCOL=ssh
 EOF
 
     success "Created $ENV_FILE"
@@ -339,8 +344,9 @@ main() {
     echo "Version:    $VERSION"
     echo ""
     echo "Next steps:"
-    echo "  - Open http://localhost:7470 in your browser"
-    echo "  - Spawn a sleeve from the web UI"
+    echo "  1. Open http://localhost:7470"
+    echo "  2. Check the Doctor tab for system health"
+    echo "  3. Clone a repo or spawn a sleeve"
     echo ""
 }
 
