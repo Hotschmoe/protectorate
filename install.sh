@@ -170,15 +170,17 @@ claude_login() {
 # -----------------------------------------------------------------------------
 
 get_latest_release() {
-    info "Fetching latest release version..."
+    info "Fetching latest version..."
 
-    # Query GitHub API for latest release
-    LATEST=$(curl -fsSL "https://api.github.com/repos/hotschmoe/protectorate/releases/latest" 2>/dev/null | \
-        grep '"tag_name"' | \
-        sed -E 's/.*"tag_name":\s*"([^"]+)".*/\1/')
+    # Query GitHub API for tags and get the highest version number
+    LATEST=$(curl -fsSL "https://api.github.com/repos/hotschmoe/protectorate/tags" 2>/dev/null | \
+        grep '"name":' | \
+        grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | \
+        sort -V | \
+        tail -1)
 
     if [[ -z "$LATEST" ]]; then
-        warn "Could not fetch latest release. Using master branch."
+        warn "Could not fetch latest version. Using master branch."
         LATEST="master"
     fi
 
