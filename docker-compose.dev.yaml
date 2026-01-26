@@ -40,6 +40,9 @@ services:
       # Git config from host (for commit identity)
       - ${HOME}/.gitconfig:/root/.gitconfig:ro
 
+      # SSH keys from host (for git push - repos must use SSH URLs)
+      - ${HOME}/.ssh:/root/.ssh:ro
+
       # Workspaces (all sleeve directories visible here)
       - ./workspaces:/home/claude/workspaces
 

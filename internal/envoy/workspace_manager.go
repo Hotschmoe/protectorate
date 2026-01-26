@@ -650,11 +650,20 @@ func (wm *WorkspaceManager) PushToRemote(wsPath string) (*protocol.FetchResult, 
 		}, nil
 	}
 
-	_, err := runGitCommand(wsPath, "push")
+	cmd := exec.Command("git", "-c", "safe.directory="+wsPath, "-C", wsPath, "push")
+	out, err := cmd.CombinedOutput()
 	if err != nil {
+		msg := string(out)
+		// Provide helpful error for auth issues
+		if strings.Contains(msg, "could not read Username") || strings.Contains(msg, "Authentication failed") {
+			return &protocol.FetchResult{
+				Success: false,
+				Message: "push failed: authentication required. Use SSH URL (git remote set-url origin git@github.com:user/repo.git) or configure git-credentials",
+			}, nil
+		}
 		return &protocol.FetchResult{
 			Success: false,
-			Message: "push failed",
+			Message: "push failed: " + msg,
 		}, nil
 	}
 
