@@ -280,24 +280,16 @@ EOF
 # -----------------------------------------------------------------------------
 
 pull_images() {
-    local VERSION="$1"
-
     info "Pulling container images..."
 
-    # For tagged releases, use the version tag; for master, use latest
-    local TAG="latest"
-    if [[ "$VERSION" != "master" ]]; then
-        TAG="$VERSION"
-    fi
-
-    $DOCKER_CMD pull "$GHCR_REGISTRY/protectorate-envoy:$TAG" || {
-        warn "Could not pull envoy image with tag $TAG, trying latest..."
-        $DOCKER_CMD pull "$GHCR_REGISTRY/protectorate-envoy:latest"
+    # Always pull :latest since docker-compose.yaml uses :latest
+    # The release workflow tags every release as both :vX.X.X and :latest
+    $DOCKER_CMD pull "$GHCR_REGISTRY/protectorate-envoy:latest" || {
+        error "Could not pull envoy image"
     }
 
-    $DOCKER_CMD pull "$GHCR_REGISTRY/protectorate-sleeve:$TAG" || {
-        warn "Could not pull sleeve image with tag $TAG, trying latest..."
-        $DOCKER_CMD pull "$GHCR_REGISTRY/protectorate-sleeve:latest"
+    $DOCKER_CMD pull "$GHCR_REGISTRY/protectorate-sleeve:latest" || {
+        error "Could not pull sleeve image"
     }
 
     success "Container images pulled"
@@ -311,8 +303,11 @@ start_envoy() {
     # Create workspaces directory if it doesn't exist
     mkdir -p workspaces
 
-    # Start with docker compose
-    $DOCKER_CMD compose up -d
+    # Stop existing containers (if updating)
+    $DOCKER_CMD compose down 2>/dev/null || true
+
+    # Start with docker compose (--force-recreate ensures new images are used)
+    $DOCKER_CMD compose up -d --force-recreate
 
     # Wait for health check
     info "Waiting for Envoy to be ready..."
@@ -363,7 +358,7 @@ main() {
     create_env "$VERSION"
 
     # 6. Pull pre-built images
-    pull_images "$VERSION"
+    pull_images
 
     # 7. Start Envoy
     start_envoy
