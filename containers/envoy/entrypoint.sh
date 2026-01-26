@@ -4,8 +4,7 @@ set -e
 TMUX_SESSION="envoy"
 
 # Fix ownership of mounted volumes
-chown -R claude:claude /workspace 2>/dev/null || true
-chown -R claude:claude /workspaces 2>/dev/null || true
+chown -R claude:claude /home/claude/workspaces 2>/dev/null || true
 chown -R claude:claude /home/claude/.claude 2>/dev/null || true
 mkdir -p /app/web 2>/dev/null || true
 

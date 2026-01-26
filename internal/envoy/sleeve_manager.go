@@ -126,7 +126,7 @@ func (m *SleeveManager) Spawn(req SpawnSleeveRequest) (*SleeveInfo, error) {
 		{
 			Type:     mount.TypeBind,
 			Source:   workspaceHostPath,
-			Target:   "/workspace",
+			Target:   "/home/claude/workspace",
 			ReadOnly: false,
 		},
 	}

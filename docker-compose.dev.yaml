@@ -40,8 +40,8 @@ services:
       - ${HOME}/.claude.json:/etc/claude/settings.json:ro
       - ${HOME}/.claude/plugins:/home/claude/.claude/plugins:ro
 
-      # Workspaces
-      - ./workspaces:/workspaces
+      # Workspaces (all sleeve directories visible here)
+      - ./workspaces:/home/claude/workspaces
 
     environment:
       - DEV_MODE=true

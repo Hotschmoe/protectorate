@@ -115,8 +115,8 @@ func LoadEnvoyConfig(path string) (*EnvoyConfig, error) {
 		Port:          7470,
 		Docker: DockerConfig{
 			Network:             "cortical-net",
-			WorkspaceRoot:       "/workspaces",
-			WorkspaceHostRoot:   "/workspaces",
+			WorkspaceRoot:       "/home/claude/workspaces",
+			WorkspaceHostRoot:   "/home/claude/workspaces",
 			CredentialsHostPath: "",
 			SettingsHostPath:    "",
 			SleeveImage:         "ghcr.io/hotschmoe/protectorate-sleeve:latest",

@@ -14,7 +14,7 @@ services:
       - ~/.claude/.credentials.json:/home/claude/.claude/.credentials.json:ro
       - ~/.claude.json:/etc/claude/settings.json:ro
       - ~/.claude/plugins:/home/claude/.claude/plugins:ro
-      - ./workspaces:/workspaces
+      - ./workspaces:/home/claude/workspaces
     networks:
       - raven
     restart: unless-stopped

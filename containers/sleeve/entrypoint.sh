@@ -4,7 +4,7 @@ set -e
 TMUX_SESSION="main"
 
 # Fix ownership of mounted volumes (runs as root)
-chown -R claude:claude /workspace
+chown -R claude:claude /home/claude/workspace
 chown -R claude:claude /home/claude/.claude 2>/dev/null || true
 
 # Copy read-only mounted settings to writable location
@@ -22,7 +22,7 @@ while true; do
     if ! su - claude -c "tmux has-session -t $SESSION 2>/dev/null"; then
         su - claude -c "tmux new-session -d -s $SESSION"
         if [ "$FIRST_RUN" = true ]; then
-            su - claude -c "tmux send-keys -t $SESSION 'cd /workspace && claude --dangerously-skip-permissions' Enter"
+            su - claude -c "tmux send-keys -t $SESSION 'cd /home/claude/workspace && claude --dangerously-skip-permissions' Enter"
             FIRST_RUN=false
         fi
     fi
@@ -34,7 +34,7 @@ chmod +x /usr/local/bin/tmux-session.sh
 
 # Start initial tmux session with Claude
 su - claude -c "tmux new-session -d -s $TMUX_SESSION"
-su - claude -c "tmux send-keys -t $TMUX_SESSION 'cd /workspace && claude --dangerously-skip-permissions' Enter"
+su - claude -c "tmux send-keys -t $TMUX_SESSION 'cd /home/claude/workspace && claude --dangerously-skip-permissions' Enter"
 
 exec ttyd \
     --port 7681 \
