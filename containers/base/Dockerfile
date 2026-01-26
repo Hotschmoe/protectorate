@@ -14,7 +14,7 @@ RUN curl -fsSL "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION
     -o /usr/local/bin/ttyd \
     && chmod +x /usr/local/bin/ttyd
 
-ARG CSTACK_VERSION=1.0.0
+ARG CSTACK_VERSION=1.0.1
 RUN curl -fsSL "https://github.com/Hotschmoe/cstack/releases/download/v${CSTACK_VERSION}/cstack-v${CSTACK_VERSION}-linux_amd64.tar.gz" \
     -o /tmp/cstack.tar.gz \
     && tar -xzf /tmp/cstack.tar.gz -C /tmp \
