@@ -243,12 +243,10 @@ func getGitInfo(wsPath string) *protocol.WorkspaceGitInfo {
 }
 
 func getGitBranch(wsPath string) (string, bool) {
-	cmd := exec.Command("git", "-C", wsPath, "rev-parse", "--abbrev-ref", "HEAD")
-	out, err := cmd.Output()
+	branch, err := runGitCommand(wsPath, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return "", false
 	}
-	branch := strings.TrimSpace(string(out))
 	if branch == "HEAD" {
 		hash, _ := runGitCommand(wsPath, "rev-parse", "--short", "HEAD")
 		return hash, true
@@ -305,7 +303,8 @@ func getGitLastCommit(wsPath string) (hash, msg, timeAgo string) {
 }
 
 func runGitCommand(wsPath string, args ...string) (string, error) {
-	fullArgs := append([]string{"-C", wsPath}, args...)
+	// Use -c safe.directory to handle mounted volumes with different ownership
+	fullArgs := append([]string{"-c", "safe.directory=" + wsPath, "-C", wsPath}, args...)
 	cmd := exec.Command("git", fullArgs...)
 	out, err := cmd.Output()
 	if err != nil {
