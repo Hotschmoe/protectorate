@@ -1,19 +1,20 @@
 # Protectorate Installation Design
 
-This document explores a one-line installer for Protectorate.
+This document describes the one-line installer for Protectorate.
 
 ---
 
 ## Goal
 
 ```bash
-curl -fsSL https://protectorate.dev/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hotschmoe/protectorate/master/install.sh | bash
 ```
 
 User runs one command, answers prompts, and ends up with:
 - Docker installed (if needed)
-- Protectorate repo cloned
-- Claude Code authenticated with long-lived token
+- Claude Code installed and authenticated
+- Protectorate repo cloned (latest release)
+- Pre-built container images pulled from ghcr.io
 - Envoy container running
 - Ready to spawn sleeves
 
@@ -69,8 +70,20 @@ User runs one command, answers prompts, and ends up with:
          |
          v
 +------------------+
-| Clone/update     |
-| Protectorate     |
+| Get latest       |
+| release tag      |
++--------+---------+
+         |
+         v
++------------------+
+| Clone repo at    |
+| release tag      |
++--------+---------+
+         |
+         v
++------------------+
+| Setup onboarding |
+| flag             |
 +--------+---------+
          |
          v
@@ -81,14 +94,15 @@ User runs one command, answers prompts, and ends up with:
          |
          v
 +------------------+
-| Build images     |
-| (make build)     |
+| Pull pre-built   |
+| images from      |
+| ghcr.io          |
 +--------+---------+
          |
          v
 +------------------+
 | Start Envoy      |
-| (make up)        |
+| (docker compose) |
 +------------------+
          |
          v
@@ -97,613 +111,161 @@ User runs one command, answers prompts, and ends up with:
 
 ---
 
-## Dependency Checks
+## Release Flow
 
-### Docker
+When a version is tagged, GitHub Actions builds and pushes images:
 
-```bash
-check_docker() {
-    if ! command -v docker &> /dev/null; then
-        echo "Docker not found. Installing..."
-        # Detect OS and install appropriately
-        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            curl -fsSL https://get.docker.com | sh
-            sudo usermod -aG docker $USER
-            echo "NOTE: You may need to log out and back in for docker group"
-        elif [[ "$OSTYPE" == "darwin"* ]]; then
-            echo "Please install Docker Desktop from https://docker.com/products/docker-desktop"
-            exit 1
-        fi
-    fi
-
-    # Verify docker works
-    if ! docker info &> /dev/null; then
-        echo "Docker installed but not running. Please start Docker."
-        exit 1
-    fi
-}
+```
+git tag v0.1.0 && git push --tags
+         |
+         v
+GitHub Actions triggers
+         |
+         +---> Build ghcr.io/hotschmoe/protectorate-base:v0.1.0
+         +---> Build ghcr.io/hotschmoe/protectorate-envoy:v0.1.0
+         +---> Build ghcr.io/hotschmoe/protectorate-sleeve:v0.1.0
+         +---> Tag all as :latest
 ```
 
-### Claude CLI
-
-```bash
-check_claude() {
-    if ! command -v claude &> /dev/null; then
-        echo "Claude Code not found. Installing..."
-        curl -fsSL https://claude.ai/install.sh | bash
-        export PATH="$HOME/.local/bin:$PATH"
-    fi
-
-    # Verify claude works
-    if ! claude --version &> /dev/null; then
-        echo "Claude CLI installed but not in PATH"
-        exit 1
-    fi
-}
-```
+Users pull pre-built images - no local building required.
 
 ---
 
-## Authentication Flow
-
-### Check Existing Auth
+## Uninstall
 
 ```bash
-check_claude_auth() {
-    # Check if credentials file exists and has valid-looking token
-    CREDS_FILE="$HOME/.claude/.credentials.json"
-    if [[ -f "$CREDS_FILE" ]]; then
-        if grep -q "accessToken" "$CREDS_FILE"; then
-            echo "Found existing Claude credentials"
-            return 0
-        fi
-    fi
-    return 1
-}
+curl -fsSL https://raw.githubusercontent.com/hotschmoe/protectorate/master/uninstall.sh | bash
 ```
 
-### Interactive Login (if needed)
+Removes:
+- All sleeve containers
+- Envoy container
+- Raven network
+- Optionally: container images
+- Optionally: ~/protectorate directory
 
-```bash
-claude_login() {
-    echo ""
-    echo "=== Claude Authentication ==="
-    echo "You need to log in to Claude Code."
-    echo "This will open a browser window."
-    echo ""
-    read -p "Press Enter to continue..."
-
-    claude auth login
-
-    if ! check_claude_auth; then
-        echo "Authentication failed. Please try again."
-        exit 1
-    fi
-}
-```
-
-### Generate Long-Lived Token
-
-```bash
-generate_token() {
-    echo ""
-    echo "=== Generating Long-Lived Token ==="
-    echo "This creates a 1-year token for container authentication."
-    echo "You'll need to authorize in your browser."
-    echo ""
-    read -p "Press Enter to continue..."
-
-    # Run setup-token and capture output
-    TOKEN_OUTPUT=$(claude setup-token 2>&1)
-
-    # Extract token from output
-    # Expected format: "Your OAuth token (valid for 1 year): sk-ant-oat01-..."
-    TOKEN=$(echo "$TOKEN_OUTPUT" | grep -oP 'sk-ant-oat01-[A-Za-z0-9_-]+')
-
-    if [[ -z "$TOKEN" ]]; then
-        echo "Failed to extract token. Output was:"
-        echo "$TOKEN_OUTPUT"
-        echo ""
-        echo "You can manually run 'claude setup-token' and add to .env"
-        return 1
-    fi
-
-    echo "Token generated successfully!"
-    echo "$TOKEN"
-}
-```
+Does NOT remove:
+- Docker (may be used by other apps)
+- Claude CLI (may be used standalone)
+- ~/.claude/ credentials
 
 ---
 
-## Environment Configuration
+## Current Implementation
 
-### Create .env File
+### install.sh
 
-```bash
-create_env() {
-    local TOKEN="$1"
-    local ENV_FILE="$PROTECTORATE_DIR/.env"
+Located at repo root. Key functions:
 
-    if [[ -f "$ENV_FILE" ]]; then
-        echo "Existing .env found. Backing up to .env.backup"
-        cp "$ENV_FILE" "$ENV_FILE.backup"
-    fi
+| Function | Purpose |
+|----------|---------|
+| `check_docker` | Install Docker if missing, handle sudo/group issues |
+| `check_claude` | Install Claude CLI if missing |
+| `check_claude_auth` | Check for existing credentials |
+| `claude_login` | Interactive OAuth login |
+| `generate_token` | Generate long-lived OAuth token (1 year) |
+| `get_latest_release` | Query GitHub API for latest release tag |
+| `setup_repo` | Clone repo at specific tag |
+| `setup_onboarding` | Set hasCompletedOnboarding flag |
+| `create_env` | Generate .env file with token |
+| `prompt_optional_vars` | Ask for optional API keys |
+| `pull_images` | Pull pre-built images from ghcr.io |
+| `start_envoy` | Start envoy via docker compose |
 
-    cat > "$ENV_FILE" << EOF
-# Protectorate Configuration
-# Generated by install.sh on $(date)
+### uninstall.sh
 
-# Claude Authentication (long-lived token, valid 1 year)
-CLAUDE_CODE_OAUTH_TOKEN=$TOKEN
+Located at repo root. Stops containers, removes network, prompts for image/directory removal.
 
-# Host paths for credential fallback (optional)
-# HOME is auto-expanded at runtime
-CREDENTIALS_HOST_PATH=\${HOME}/.claude/.credentials.json
-SETTINGS_HOST_PATH=\${HOME}/.claude.json
+### .github/workflows/release.yaml
 
-# Docker settings
-COMPOSE_PROJECT_NAME=protectorate
-EOF
+Triggered by version tags (v*). Builds and pushes:
+- protectorate-base (internal dependency)
+- protectorate-envoy
+- protectorate-sleeve
 
-    echo "Created $ENV_FILE"
-}
+### docker-compose.yaml
+
+Production compose file. Uses pre-built ghcr.io images:
+```yaml
+image: ghcr.io/hotschmoe/protectorate-envoy:latest
 ```
 
-### Prompt for Optional Variables
+### docker-compose.dev.yaml
 
-```bash
-prompt_optional_vars() {
-    echo ""
-    echo "=== Optional Configuration ==="
-    echo ""
+Development compose file. Uses local base image + volume-mounted binary for fast iteration.
 
-    # Anthropic API Key (for direct API access, separate from Claude subscription)
-    read -p "Anthropic API Key (optional, press Enter to skip): " ANTHROPIC_KEY
-    if [[ -n "$ANTHROPIC_KEY" ]]; then
-        echo "ANTHROPIC_API_KEY=$ANTHROPIC_KEY" >> "$ENV_FILE"
-    fi
+### configs/envoy.yaml
 
-    # OpenAI API Key (for future multi-model support)
-    read -p "OpenAI API Key (optional, press Enter to skip): " OPENAI_KEY
-    if [[ -n "$OPENAI_KEY" ]]; then
-        echo "OPENAI_API_KEY=$OPENAI_KEY" >> "$ENV_FILE"
-    fi
-
-    # Google AI Key (for Gemini CLI support)
-    read -p "Google AI API Key (optional, press Enter to skip): " GOOGLE_KEY
-    if [[ -n "$GOOGLE_KEY" ]]; then
-        echo "GOOGLE_AI_API_KEY=$GOOGLE_KEY" >> "$ENV_FILE"
-    fi
-}
+Envoy configuration. Uses env var with default for sleeve image:
+```yaml
+sleeve_image: ${SLEEVE_IMAGE:-ghcr.io/hotschmoe/protectorate-sleeve:latest}
 ```
+
+### .env.example
+
+Documents all environment variables.
 
 ---
 
-## Claude Code Configuration
+## Decisions Made
 
-Claude Code has several extension points. Some come with the repo, others need setup.
-
-### What Comes With the Repo (Project-Level)
-
-These live in `.claude/` directory and are available automatically after clone:
-
-```
-.claude/
-  agents/           # Custom agents for Task tool
-    build-verifier.md
-    coder-sonnet.md
-    gemini-analyzer.md
-  skills/           # Slash commands (/docker, /test, /verify)
-    docker.md
-    test.md
-    verify.md
-  settings.local.json  # Project-specific permissions
-```
-
-**No install action needed** - these work as soon as repo is cloned.
-
-### What Needs Setup (User-Level)
-
-These live in `~/.claude/` and may need configuration:
-
-| Component | Location | Install Action |
-|-----------|----------|----------------|
-| Credentials | `~/.claude/.credentials.json` | Handled by auth flow |
-| User settings | `~/.claude.json` | Set `hasCompletedOnboarding: true` |
-| Plugins | `~/.claude/plugins/` | Optional: install via `claude plugin` |
-| Hooks | `~/.claude/hooks/` or project `.claude/hooks/` | Optional: copy templates |
-
-### Plugins
-
-Plugins extend Claude Code's capabilities. For Protectorate, potentially useful:
-
-```bash
-# Install plugins (optional step in installer)
-setup_plugins() {
-    echo ""
-    echo "=== Installing Recommended Plugins ==="
-
-    # Example: code-simplifier for cleaner output
-    claude plugin install code-simplifier --marketplace claude-plugins-official || true
-
-    # Future: protectorate-specific plugins
-    # claude plugin install protectorate-tools --marketplace protectorate || true
-}
-```
-
-### Hooks
-
-Hooks run shell commands on Claude Code events. Useful for Protectorate coordination:
-
-```
-~/.claude/hooks/
-  pre-tool-use.sh    # Before any tool runs
-  post-tool-use.sh   # After any tool completes
-  on-error.sh        # On tool errors
-```
-
-**Potential Protectorate hooks:**
-- Notify Envoy when sleeve starts/stops tasks
-- Log tool usage for coordination
-- Sync state to .cstack files
-
-```bash
-setup_hooks() {
-    HOOKS_DIR="$HOME/.claude/hooks"
-    mkdir -p "$HOOKS_DIR"
-
-    # Copy hook templates from repo
-    if [[ -d "$PROTECTORATE_DIR/templates/hooks" ]]; then
-        cp "$PROTECTORATE_DIR/templates/hooks/"* "$HOOKS_DIR/"
-        chmod +x "$HOOKS_DIR/"*.sh
-    fi
-}
-```
-
-### Commands (Custom Slash Commands)
-
-Beyond skills (which are project-level), users can define global commands:
-
-```
-~/.claude/commands/
-  my-command.md
-```
-
-For Protectorate, we might want global commands like:
-- `/sleeve-status` - Check all sleeves from any project
-- `/needlecast` - Send message to another sleeve
-
-### Onboarding Flag
-
-Critical for non-interactive use (containers, CI):
-
-```bash
-setup_onboarding() {
-    CLAUDE_JSON="$HOME/.claude.json"
-
-    if [[ -f "$CLAUDE_JSON" ]]; then
-        # Add hasCompletedOnboarding if not present
-        if ! grep -q "hasCompletedOnboarding" "$CLAUDE_JSON"; then
-            # Use jq if available, otherwise sed
-            if command -v jq &> /dev/null; then
-                jq '.hasCompletedOnboarding = true' "$CLAUDE_JSON" > "$CLAUDE_JSON.tmp"
-                mv "$CLAUDE_JSON.tmp" "$CLAUDE_JSON"
-            else
-                # Fallback: insert before closing brace
-                sed -i 's/}$/,"hasCompletedOnboarding":true}/' "$CLAUDE_JSON"
-            fi
-        fi
-    else
-        # Create minimal config
-        echo '{"hasCompletedOnboarding":true}' > "$CLAUDE_JSON"
-    fi
-}
-```
-
-### Updated Install Flow
-
-```
-...
-Clone/update Protectorate
-     |
-     v
-+------------------+
-| Setup onboarding |
-| flag             |
-+--------+---------+
-     |
-     v
-+------------------+
-| Install plugins  |
-| (optional)       |
-+--------+---------+
-     |
-     v
-+------------------+
-| Setup hooks      |
-| (optional)       |
-+--------+---------+
-     |
-     v
-Create .env with token
-...
-```
+| Question | Decision |
+|----------|----------|
+| Install location | Always `~/protectorate` |
+| Version selection | Always latest release (queries GitHub API) |
+| Image registry | ghcr.io/hotschmoe (public, no auth needed) |
+| Compose files | Two: production (ghcr.io) and dev (local build) |
+| Config source | envoy.yaml with env var overrides |
+| Uninstall script | Yes, provided |
 
 ---
 
-## Repo Setup
+## Files
 
-### Clone or Update
-
-```bash
-setup_repo() {
-    PROTECTORATE_DIR="$HOME/protectorate"
-    REPO_URL="https://github.com/hotschmoe/protectorate.git"
-
-    if [[ -d "$PROTECTORATE_DIR" ]]; then
-        echo "Protectorate directory exists. Updating..."
-        cd "$PROTECTORATE_DIR"
-        git pull origin master
-    else
-        echo "Cloning Protectorate..."
-        git clone "$REPO_URL" "$PROTECTORATE_DIR"
-        cd "$PROTECTORATE_DIR"
-    fi
-}
-```
+| File | Purpose | Status |
+|------|---------|--------|
+| `install.sh` | Main installer script | DONE |
+| `uninstall.sh` | Uninstaller script | DONE |
+| `.github/workflows/release.yaml` | GitHub Actions for image builds | DONE |
+| `.env.example` | Environment variable documentation | DONE |
+| `docker-compose.yaml` | Production compose (ghcr.io images) | DONE |
+| `docker-compose.dev.yaml` | Development compose (local build) | DONE |
+| `configs/envoy.yaml` | Envoy configuration | DONE |
 
 ---
 
-## Build and Launch
+## Future Improvements
 
-### Build Images
+See `docs/CONFIG_TODO.md` for full roadmap. Key items:
 
-```bash
-build_images() {
-    echo ""
-    echo "=== Building Container Images ==="
-    echo "This may take a few minutes on first run..."
-    echo ""
+**Short-term:**
+- [ ] `--version` flag to install specific version
+- [ ] `--dry-run` flag
+- [ ] Better error messages
 
-    cd "$PROTECTORATE_DIR"
+**Medium-term:**
+- [ ] macOS support
+- [ ] WSL2 support
+- [ ] `protectorate` CLI wrapper
+- [ ] Systemd integration
 
-    # Build base image if needed
-    if ! docker images | grep -q "protectorate-sleeve-base"; then
-        echo "Building base image (slow, one-time)..."
-        make build-base
-    fi
-
-    # Build main images
-    make build
-}
-```
-
-### Start Envoy
-
-```bash
-start_envoy() {
-    echo ""
-    echo "=== Starting Envoy ==="
-    echo ""
-
-    cd "$PROTECTORATE_DIR"
-    make up
-
-    # Wait for health check
-    echo "Waiting for Envoy to be ready..."
-    for i in {1..30}; do
-        if curl -s http://localhost:7470/health > /dev/null 2>&1; then
-            echo "Envoy is running!"
-            return 0
-        fi
-        sleep 1
-    done
-
-    echo "Envoy didn't start in time. Check logs with: docker logs protectorate-envoy"
-    return 1
-}
-```
-
----
-
-## Complete Install Script Skeleton
-
-```bash
-#!/usr/bin/env bash
-set -e
-
-PROTECTORATE_VERSION="0.1.0"
-
-echo "========================================"
-echo "  Protectorate Installer v$PROTECTORATE_VERSION"
-echo "========================================"
-echo ""
-
-# 1. Check/install Docker
-check_docker
-
-# 2. Check/install Claude CLI
-check_claude
-
-# 3. Check/perform Claude authentication
-if ! check_claude_auth; then
-    claude_login
-fi
-
-# 4. Generate long-lived token
-TOKEN=$(generate_token)
-if [[ -z "$TOKEN" ]]; then
-    echo "Continuing without long-lived token (will use mounted credentials)"
-    TOKEN=""
-fi
-
-# 5. Clone/update repo
-setup_repo
-
-# 6. Setup Claude Code configuration
-setup_onboarding    # Set hasCompletedOnboarding flag
-setup_plugins       # Install recommended plugins (optional)
-setup_hooks         # Copy hook templates (optional)
-
-# 7. Create .env file
-create_env "$TOKEN"
-
-# 8. Prompt for optional API keys
-prompt_optional_vars
-
-# 9. Build images
-build_images
-
-# 10. Start Envoy
-start_envoy
-
-echo ""
-echo "========================================"
-echo "  Protectorate is ready!"
-echo "========================================"
-echo ""
-echo "Envoy API: http://localhost:7470"
-echo "Logs:      docker logs -f protectorate-envoy"
-echo "Stop:      cd ~/protectorate && make down"
-echo ""
-echo "Claude Code configuration:"
-echo "  - Agents:  .claude/agents/ (build-verifier, coder-sonnet, gemini-analyzer)"
-echo "  - Skills:  .claude/skills/ (/docker, /test, /verify)"
-echo "  - Hooks:   ~/.claude/hooks/ (if installed)"
-echo ""
-echo "Next steps:"
-echo "  - Spawn a sleeve: curl -X POST http://localhost:7470/api/sleeves/spawn"
-echo "  - View status:    curl http://localhost:7470/api/sleeves"
-echo ""
-```
-
----
-
-## Hosting the Installer
-
-Options:
-
-1. **GitHub raw:** `curl -fsSL https://raw.githubusercontent.com/hotschmoe/protectorate/master/install.sh | bash`
-
-2. **Custom domain:** `curl -fsSL https://protectorate.dev/install.sh | bash`
-   - Requires DNS + hosting
-   - Shorter, memorable
-   - Can track installs
-
-3. **GitHub releases:** Versioned installers attached to releases
-
----
-
-## Installer UX Research
-
-**TODO:** Research these installers for clean, polished terminal UI:
-
-| Project | Install Command | Notes |
-|---------|-----------------|-------|
-| Pi-hole | `curl -sSL https://install.pi-hole.net \| bash` | Clean whiptail/dialog TUI, progress bars, color output |
-| Clawdbot | TBD | Research what tools/libraries they use |
-
-**Questions to answer:**
-- What TUI library do they use? (whiptail, dialog, gum, charm?)
-- How do they handle multi-step progress?
-- How do they validate input?
-- How do they handle errors gracefully?
-
-**Potential tools:**
-- `whiptail` - Simple TUI dialogs (comes with most distros)
-- `dialog` - More features than whiptail
-- `gum` - Modern, Go-based TUI (https://github.com/charmbracelet/gum)
-- `charm` - Full TUI framework from same team
-- Pure bash with ANSI colors - Simpler, no dependencies
+**Long-term:**
+- [ ] TUI installer (gum/whiptail)
+- [ ] Custom domain (protectorate.dev/install.sh)
+- [ ] Auto-updates
 
 ---
 
 ## Security Considerations
 
-1. **Piping to bash:** Standard practice but users should review script first
-   - Offer: `curl -fsSL ... | less` to review before running
+1. **Piping to bash:** Standard practice, users can review with `curl ... | less` first
 
-2. **Token storage:** `.env` file contains sensitive token
-   - Should be in `.gitignore` (already is)
-   - Warn user not to commit
+2. **Token storage:** `.env` contains sensitive token
+   - In `.gitignore`
+   - User warned not to commit
 
-3. **Docker group:** Adding user to docker group is a security tradeoff
-   - Equivalent to root access
+3. **Docker group:** Adding user to docker group grants root-equivalent access
+   - Necessary for container management
    - Alternative: rootless docker (more complex)
 
----
-
-## Open Questions
-
-1. **Install location:** `~/protectorate` or `/opt/protectorate` or configurable?
-
-2. **Systemd service:** Should we install a systemd unit for auto-start?
-
-3. **Update mechanism:** How do users update Protectorate?
-   - Re-run installer?
-   - `protectorate update` command?
-   - Auto-update check?
-
-4. **Uninstall:** Should we provide an uninstall script?
-
-5. **Multi-machine:** How to handle installing on multiple machines?
-   - Same token can be used (it's tied to account, not machine)
-   - Should we document this?
-
-6. **Windows/WSL:** Support WSL2? Native Windows?
-
----
-
-## MVP Scope
-
-For first version, focus on:
-
-**Core Install:**
-- [x] Linux support (Ubuntu/Debian primary)
-- [x] Docker installation
-- [x] Claude CLI installation
-- [x] Long-lived token generation
-- [x] .env creation
-- [x] Image build
-- [x] Envoy launch
-
-**Claude Code Config:**
-- [x] Onboarding flag setup (hasCompletedOnboarding)
-- [x] Project agents come with repo (.claude/agents/)
-- [x] Project skills come with repo (.claude/skills/)
-- [ ] Optional plugin installation
-- [ ] Optional hooks setup
-- [ ] Hook templates in repo (templates/hooks/)
-
-**Later:**
-- [ ] macOS support (Docker Desktop complexity)
-- [ ] Windows/WSL support
-- [ ] Systemd integration
-- [ ] Auto-updates
-- [ ] Global commands (~/.claude/commands/)
-- [ ] Plugin marketplace for Protectorate-specific tools
-
----
-
-## Files to Create
-
-| File | Purpose | Status |
-|------|---------|--------|
-| `install.sh` | Main installer script | DONE |
-| `.github/workflows/release.yaml` | GitHub Actions for image builds | DONE |
-| `.env.example` | Environment variable documentation | DONE |
-| `templates/hooks/pre-tool-use.sh` | Hook template for Envoy notification | TODO |
-| `templates/hooks/post-tool-use.sh` | Hook template for state sync | TODO |
-| `.claude/commands/` | Global commands (if needed) | MAYBE |
-
-## Files Already in Repo
-
-| File | Purpose |
-|------|---------|
-| `.claude/agents/*.md` | Custom agents (build-verifier, coder-sonnet, gemini-analyzer) |
-| `.claude/skills/*.md` | Slash commands (/docker, /test, /verify) |
-| `.claude/settings.local.json` | Project permissions |
-| `docker-compose.yaml` | Container orchestration |
-| `configs/envoy.yaml` | Envoy configuration |
-| `.env.example` | Template for .env |
-| `Makefile` | Build commands |
+4. **Public images:** ghcr.io packages are public, no auth needed to pull
