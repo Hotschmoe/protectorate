@@ -570,6 +570,13 @@
             return { name: image, version: 'latest' };
         }
 
+        function formatImageDisplay(containerName, imageName) {
+            if (containerName === 'envoy-dev' && imageName === 'protectorate/base') {
+                return 'protectorate/envoy (dev->bin mnt)';
+            }
+            return imageName;
+        }
+
         async function refreshContainers() {
             try {
                 const resp = await fetch('/api/docker/containers');
@@ -577,10 +584,11 @@
                 const tbody = document.querySelector('#containers-table tbody');
                 tbody.innerHTML = containers.map(c => {
                     const { name: imageName, version } = parseImageVersion(c.image);
+                    const displayName = formatImageDisplay(c.name, imageName);
                     return `
                     <tr>
                         <td>${c.name || c.id}</td>
-                        <td>${imageName}</td>
+                        <td>${displayName}</td>
                         <td>${version}</td>
                         <td class="status-${c.state}">${c.status}</td>
                     </tr>
