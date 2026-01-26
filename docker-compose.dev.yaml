@@ -1,6 +1,9 @@
 # docker-compose.dev.yaml
 # Development configuration with volume-mounted binaries and hot-reload webui
 #
+# NOTE: This is for LOCAL DEVELOPMENT only.
+#       Production uses docker-compose.yaml with pre-built ghcr.io images.
+#
 # Usage:
 #   make dev        # Start dev environment
 #   make dev-logs   # View logs

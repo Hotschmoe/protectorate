@@ -7,7 +7,7 @@ docker:
   credentials_host_path: ${CREDENTIALS_HOST_PATH}
   settings_host_path: ${SETTINGS_HOST_PATH}
   plugins_host_path: ${PLUGINS_HOST_PATH}
-  sleeve_image: protectorate-sleeve:latest
+  sleeve_image: ${SLEEVE_IMAGE:-ghcr.io/hotschmoe/protectorate-sleeve:latest}
 
 poll_interval: 1h
 idle_threshold: 0s

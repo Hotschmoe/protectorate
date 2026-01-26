@@ -47,21 +47,46 @@ type MirrorConfig struct {
 	Token     string `yaml:"github_token"`
 }
 
+// Matches ${VAR}, ${VAR:-default}, or $VAR
 var envVarPattern = regexp.MustCompile(`\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
 
 func expandEnv(s string) string {
 	return envVarPattern.ReplaceAllStringFunc(s, func(match string) string {
-		var varName string
+		var varName, defaultVal string
+		hasDefault := false
+
 		if match[1] == '{' {
-			varName = match[2 : len(match)-1]
+			// ${VAR} or ${VAR:-default}
+			inner := match[2 : len(match)-1]
+			if idx := indexOf(inner, ":-"); idx >= 0 {
+				varName = inner[:idx]
+				defaultVal = inner[idx+2:]
+				hasDefault = true
+			} else {
+				varName = inner
+			}
 		} else {
+			// $VAR
 			varName = match[1:]
 		}
+
 		if val := os.Getenv(varName); val != "" {
 			return val
 		}
+		if hasDefault {
+			return defaultVal
+		}
 		return match
 	})
+}
+
+func indexOf(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
 }
 
 func expandEnvInConfig(node *yaml.Node) {

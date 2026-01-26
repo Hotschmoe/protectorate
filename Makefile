@@ -123,11 +123,34 @@ watch:
 # Production/Release Targets
 # =============================================================================
 
-.PHONY: release
+.PHONY: release publish install
+
+GHCR_REGISTRY := ghcr.io/hotschmoe
+VERSION ?= latest
 
 # Build production containers (full multi-stage builds)
 release: build-all
 	@echo "Production build complete"
+
+# Build and push images to ghcr.io (fallback if GitHub Actions fails)
+# Usage: make publish VERSION=v0.1.0
+# Requires: docker login ghcr.io -u USERNAME -p TOKEN
+publish: build-all
+	@echo "Tagging and pushing images to $(GHCR_REGISTRY)..."
+	docker tag protectorate/envoy:latest $(GHCR_REGISTRY)/protectorate-envoy:$(VERSION)
+	docker tag protectorate/envoy:latest $(GHCR_REGISTRY)/protectorate-envoy:latest
+	docker tag protectorate/sleeve:latest $(GHCR_REGISTRY)/protectorate-sleeve:$(VERSION)
+	docker tag protectorate/sleeve:latest $(GHCR_REGISTRY)/protectorate-sleeve:latest
+	docker push $(GHCR_REGISTRY)/protectorate-envoy:$(VERSION)
+	docker push $(GHCR_REGISTRY)/protectorate-envoy:latest
+	docker push $(GHCR_REGISTRY)/protectorate-sleeve:$(VERSION)
+	docker push $(GHCR_REGISTRY)/protectorate-sleeve:latest
+	@echo "Published $(VERSION) to $(GHCR_REGISTRY)"
+
+# Run the install script (for local testing)
+install:
+	@chmod +x install.sh
+	@./install.sh
 
 # =============================================================================
 # Help
@@ -153,6 +176,7 @@ help:
 	@echo ""
 	@echo "Production:"
 	@echo "  make release             Full production build"
+	@echo "  make publish VERSION=v0.1.0  Build and push to ghcr.io"
 	@echo "  make up                  Start services via docker-compose"
 	@echo "  make down                Stop services"
 	@echo ""

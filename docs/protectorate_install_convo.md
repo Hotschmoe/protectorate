@@ -689,7 +689,9 @@ For first version, focus on:
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `install.sh` | Main installer script | TODO |
+| `install.sh` | Main installer script | DONE |
+| `.github/workflows/release.yaml` | GitHub Actions for image builds | DONE |
+| `.env.example` | Environment variable documentation | DONE |
 | `templates/hooks/pre-tool-use.sh` | Hook template for Envoy notification | TODO |
 | `templates/hooks/post-tool-use.sh` | Hook template for state sync | TODO |
 | `.claude/commands/` | Global commands (if needed) | MAYBE |

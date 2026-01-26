@@ -1,9 +1,7 @@
 services:
   envoy:
     container_name: envoy-poe
-    build:
-      context: .
-      dockerfile: containers/envoy/Dockerfile
+    image: ghcr.io/hotschmoe/protectorate-envoy:latest
     ports:
       - "7470:7470"
     environment:
