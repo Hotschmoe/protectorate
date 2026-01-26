@@ -15,7 +15,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o envoy ./cmd/envoy
 FROM ${BASE_IMAGE}:${BASE_TAG}
 
 COPY --from=builder /build/envoy /usr/local/bin/envoy
-COPY --from=builder /build/configs/envoy.yaml /etc/envoy/envoy.yaml
 COPY containers/envoy/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

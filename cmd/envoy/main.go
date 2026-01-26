@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -12,13 +11,7 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "configs/envoy.yaml", "path to config file")
-	flag.Parse()
-
-	cfg, err := config.LoadEnvoyConfig(*configPath)
-	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
-	}
+	cfg := config.LoadEnvoyConfig()
 
 	srv, err := envoy.NewServer(cfg)
 	if err != nil {

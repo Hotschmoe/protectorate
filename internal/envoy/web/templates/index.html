@@ -177,6 +177,37 @@
             padding: 2rem;
             color: #8b949e;
         }
+        .spawn-loading {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(22, 27, 34, 0.95);
+            border-radius: 6px;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+        }
+        .spawn-loading.active { display: flex; }
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 3px solid #30363d;
+            border-top-color: #58a6ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .spawn-loading-text {
+            color: #8b949e;
+            font-size: 0.9rem;
+        }
+        .modal-content { position: relative; }
         .radio-group {
             display: flex;
             gap: 1rem;
@@ -293,6 +324,10 @@
 
     <div id="spawn-modal" class="modal">
         <div class="modal-content">
+            <div id="spawn-loading" class="spawn-loading">
+                <div class="spinner"></div>
+                <div class="spawn-loading-text">Spawning sleeve...</div>
+            </div>
             <h2 class="modal-title">Spawn New Sleeve</h2>
             <form id="spawn-form" onsubmit="spawnSleeve(event)">
                 <div class="form-group">
@@ -656,7 +691,17 @@
         function hideSpawnModal() {
             document.getElementById('spawn-modal').classList.remove('active');
             document.getElementById('spawn-form').reset();
+            hideSpawnLoading();
             toggleWorkspaceMode();
+        }
+
+        function showSpawnLoading(msg) {
+            document.querySelector('.spawn-loading-text').textContent = msg || 'Spawning sleeve...';
+            document.getElementById('spawn-loading').classList.add('active');
+        }
+
+        function hideSpawnLoading() {
+            document.getElementById('spawn-loading').classList.remove('active');
         }
 
         async function spawnSleeve(e) {
@@ -672,12 +717,14 @@
                         alert('Please enter a workspace name');
                         return;
                     }
+                    showSpawnLoading('Creating workspace...');
                     const createResp = await fetch('/api/workspaces', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ name: wsName })
                     });
                     if (!createResp.ok) {
+                        hideSpawnLoading();
                         const err = await createResp.text();
                         alert('Failed to create workspace: ' + err);
                         return;
@@ -692,6 +739,7 @@
                     }
                 }
 
+                showSpawnLoading('Spawning sleeve...');
                 const resp = await fetch('/api/sleeves', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -699,15 +747,18 @@
                 });
 
                 if (!resp.ok) {
+                    hideSpawnLoading();
                     const err = await resp.text();
                     alert('Failed to spawn sleeve: ' + err);
                     return;
                 }
 
+                hideSpawnLoading();
                 hideSpawnModal();
                 refreshSleeves();
                 refreshContainers();
             } catch (e) {
+                hideSpawnLoading();
                 console.error('Failed to spawn sleeve:', e);
                 alert('Failed to spawn sleeve: ' + e.message);
             }

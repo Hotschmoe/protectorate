@@ -28,7 +28,6 @@ Development:
          |   - ./bin/envoy:/usr/local/bin/envoy
          |   - ./containers/envoy/entrypoint.sh:/entrypoint.sh
          |   - ./internal/envoy/web:/app/web
-         |   - ./configs/envoy.yaml:/etc/envoy/envoy.yaml
          v
 +---------------------------+
 | envoy-dev container       |  <-- runs base image with mounts
@@ -41,7 +40,7 @@ Production:
          |
          | Dockerfile (multi-stage)
          |   - Builds Go binary in golang:1.24-alpine
-         |   - Copies binary, config, entrypoint into image
+         |   - Copies binary + entrypoint into image
          v
 +---------------------------+
 | ghcr.io/.../envoy:latest  |  <-- self-contained image
@@ -62,9 +61,6 @@ volumes:
 
   # Webui templates/static (hot-reload, just refresh browser)
   - ./internal/envoy/web:/app/web:ro
-
-  # Config file
-  - ./configs/envoy.yaml:/etc/envoy/envoy.yaml:ro
 
   # Docker socket (for sleeve management)
   - /var/run/docker.sock:/var/run/docker.sock
@@ -103,20 +99,28 @@ volumes:
 
 ## Environment Variables
 
+All configuration is via environment variables (no config file needed).
+See `.env.example` for full list with defaults.
+
 ### Common to both
 
-| Variable | Purpose |
-|----------|---------|
-| WORKSPACE_HOST_ROOT | Host path to workspaces (passed to sleeve spawns) |
-| CREDENTIALS_HOST_PATH | Host path to Claude credentials |
-| SETTINGS_HOST_PATH | Host path to Claude settings |
-| PLUGINS_HOST_PATH | Host path to Claude plugins |
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| ENVOY_PORT | 7470 | HTTP server port |
+| DOCKER_NETWORK | raven | Docker network name |
+| WORKSPACE_ROOT | /home/claude/workspaces | Container path for workspaces |
+| WORKSPACE_HOST_ROOT | (required) | Host path to workspaces |
+| CREDENTIALS_HOST_PATH | | Host path to Claude credentials |
+| SETTINGS_HOST_PATH | | Host path to Claude settings |
+| PLUGINS_HOST_PATH | | Host path to Claude plugins |
+| SLEEVE_IMAGE | ghcr.io/.../sleeve:latest | Docker image for sleeves |
 
 ### Dev only
 
 | Variable | Value | Purpose |
 |----------|-------|---------|
-| DEV_MODE | true | Enables dev-specific behavior (if any) |
+| DEV_MODE | true | Enables dev-specific behavior |
+| SLEEVE_IMAGE | protectorate/sleeve:latest | Use local sleeve image |
 
 ## Build Commands
 
@@ -174,13 +178,15 @@ Shared by both envoy and sleeve. Contains:
 
 Multi-stage build:
 1. Stage 1: golang:1.24-alpine builds the envoy binary
-2. Stage 2: Copies binary + config + entrypoint onto base image
+2. Stage 2: Copies binary + entrypoint onto base image
+
+Configuration is entirely via environment variables (no config file).
 
 ### Envoy Dev (containers/envoy/Dockerfile.dev)
 
 Single-stage build:
 - Copies pre-built binary from `bin/envoy`
-- Copies config and entrypoint
+- Copies entrypoint
 
 Note: In practice, dev uses volume mounts instead of this Dockerfile.
 

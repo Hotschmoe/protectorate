@@ -29,9 +29,6 @@ services:
       # Mount webui for hot-reload (just refresh browser!)
       - ./internal/envoy/web:/app/web:ro
 
-      # Mount configs
-      - ./configs/envoy.yaml:/etc/envoy/envoy.yaml:ro
-
       # Docker socket for sleeve management
       - /var/run/docker.sock:/var/run/docker.sock
 

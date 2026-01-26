@@ -1,159 +1,140 @@
 package config
 
 import (
-	"fmt"
 	"os"
-	"regexp"
+	"strconv"
 	"time"
-
-	"gopkg.in/yaml.v3"
 )
 
 // EnvoyConfig defines the configuration for the Envoy manager service.
 type EnvoyConfig struct {
-	PollInterval  time.Duration `yaml:"poll_interval"`
-	IdleThreshold time.Duration `yaml:"idle_threshold"`
-	MaxSleeves    int           `yaml:"max_sleeves"`
-	Port          int           `yaml:"port"`
-	Docker        DockerConfig  `yaml:"docker"`
-	Gitea         GiteaConfig   `yaml:"gitea"`
-	Mirror        MirrorConfig  `yaml:"mirror"`
+	PollInterval  time.Duration
+	IdleThreshold time.Duration
+	MaxSleeves    int
+	Port          int
+	Docker        DockerConfig
+	Gitea         GiteaConfig
+	Mirror        MirrorConfig
 }
 
 // DockerConfig defines Docker-specific configuration.
 type DockerConfig struct {
-	Network             string `yaml:"network"`
-	WorkspaceRoot       string `yaml:"workspace_root"`
-	WorkspaceHostRoot   string `yaml:"workspace_host_root"`
-	CredentialsHostPath string `yaml:"credentials_host_path"`
-	SettingsHostPath    string `yaml:"settings_host_path"`
-	PluginsHostPath     string `yaml:"plugins_host_path"`
-	SleeveImage         string `yaml:"sleeve_image"`
+	Network             string
+	WorkspaceRoot       string
+	WorkspaceHostRoot   string
+	CredentialsHostPath string
+	SettingsHostPath    string
+	PluginsHostPath     string
+	SleeveImage         string
 }
 
 // GiteaConfig defines Gitea configuration.
 type GiteaConfig struct {
-	URL      string `yaml:"url"`
-	User     string `yaml:"user"`
-	Password string `yaml:"password"`
-	Token    string `yaml:"token"`
+	URL      string
+	User     string
+	Password string
+	Token    string
 }
 
 // MirrorConfig defines GitHub mirror configuration.
 type MirrorConfig struct {
-	Enabled   bool   `yaml:"enabled"`
-	Frequency string `yaml:"frequency"` // "daily", "hourly", etc.
-	GitHubOrg string `yaml:"github_org"`
-	Token     string `yaml:"github_token"`
+	Enabled   bool
+	Frequency string
+	GitHubOrg string
+	Token     string
 }
 
-// Matches ${VAR}, ${VAR:-default}, or $VAR
-var envVarPattern = regexp.MustCompile(`\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
-
-func expandEnv(s string) string {
-	return envVarPattern.ReplaceAllStringFunc(s, func(match string) string {
-		var varName, defaultVal string
-		hasDefault := false
-
-		if match[1] == '{' {
-			// ${VAR} or ${VAR:-default}
-			inner := match[2 : len(match)-1]
-			if idx := indexOf(inner, ":-"); idx >= 0 {
-				varName = inner[:idx]
-				defaultVal = inner[idx+2:]
-				hasDefault = true
-			} else {
-				varName = inner
-			}
-		} else {
-			// $VAR
-			varName = match[1:]
-		}
-
-		if val := os.Getenv(varName); val != "" {
-			return val
-		}
-		if hasDefault {
-			return defaultVal
-		}
-		return match
-	})
+// getEnv returns the environment variable value or a default.
+func getEnv(key, defaultVal string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return defaultVal
 }
 
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
+// getEnvInt returns the environment variable as int or a default.
+func getEnvInt(key string, defaultVal int) int {
+	if val := os.Getenv(key); val != "" {
+		if i, err := strconv.Atoi(val); err == nil {
 			return i
 		}
 	}
-	return -1
+	return defaultVal
 }
 
-func expandEnvInConfig(node *yaml.Node) {
-	if node == nil {
-		return
-	}
-
-	switch node.Kind {
-	case yaml.ScalarNode:
-		if node.Tag == "!!str" {
-			node.Value = expandEnv(node.Value)
-		}
-	case yaml.MappingNode, yaml.SequenceNode, yaml.DocumentNode:
-		for _, child := range node.Content {
-			expandEnvInConfig(child)
+// getEnvDuration returns the environment variable as duration or a default.
+func getEnvDuration(key string, defaultVal time.Duration) time.Duration {
+	if val := os.Getenv(key); val != "" {
+		if d, err := time.ParseDuration(val); err == nil {
+			return d
 		}
 	}
+	return defaultVal
 }
 
-// LoadEnvoyConfig loads envoy configuration from a YAML file with defaults.
-func LoadEnvoyConfig(path string) (*EnvoyConfig, error) {
-	config := &EnvoyConfig{
-		PollInterval:  1 * time.Hour,
-		IdleThreshold: 0, // 0 means never timeout
-		MaxSleeves:    10,
-		Port:          7470,
+// getEnvBool returns the environment variable as bool or a default.
+func getEnvBool(key string, defaultVal bool) bool {
+	if val := os.Getenv(key); val != "" {
+		if b, err := strconv.ParseBool(val); err == nil {
+			return b
+		}
+	}
+	return defaultVal
+}
+
+// LoadEnvoyConfig loads configuration from environment variables with sensible defaults.
+// All settings can be overridden via environment variables.
+//
+// Environment variables:
+//
+//	ENVOY_PORT              - HTTP server port (default: 7470)
+//	ENVOY_POLL_INTERVAL     - Sleeve poll interval (default: 1h)
+//	ENVOY_IDLE_THRESHOLD    - Idle timeout, 0 = never (default: 0)
+//	ENVOY_MAX_SLEEVES       - Maximum concurrent sleeves (default: 10)
+//
+//	DOCKER_NETWORK          - Docker network name (default: raven)
+//	WORKSPACE_ROOT          - Container path for workspaces (default: /home/claude/workspaces)
+//	WORKSPACE_HOST_ROOT     - Host path for workspaces (required for sleeve mounts)
+//	CREDENTIALS_HOST_PATH   - Host path to Claude credentials file
+//	SETTINGS_HOST_PATH      - Host path to Claude settings file
+//	PLUGINS_HOST_PATH       - Host path to Claude plugins directory
+//	SLEEVE_IMAGE            - Docker image for sleeves (default: ghcr.io/hotschmoe/protectorate-sleeve:latest)
+//
+//	GITEA_URL               - Gitea server URL (default: http://gitea:3000)
+//	GITEA_USER              - Gitea username
+//	GITEA_PASSWORD          - Gitea password
+//	GITEA_TOKEN             - Gitea API token
+//
+//	MIRROR_ENABLED          - Enable GitHub mirroring (default: false)
+//	MIRROR_FREQUENCY        - Mirror frequency (default: daily)
+//	MIRROR_GITHUB_ORG       - GitHub organization to mirror
+//	MIRROR_GITHUB_TOKEN     - GitHub API token for mirroring
+func LoadEnvoyConfig() *EnvoyConfig {
+	return &EnvoyConfig{
+		Port:          getEnvInt("ENVOY_PORT", 7470),
+		PollInterval:  getEnvDuration("ENVOY_POLL_INTERVAL", 1*time.Hour),
+		IdleThreshold: getEnvDuration("ENVOY_IDLE_THRESHOLD", 0),
+		MaxSleeves:    getEnvInt("ENVOY_MAX_SLEEVES", 10),
 		Docker: DockerConfig{
-			Network:             "cortical-net",
-			WorkspaceRoot:       "/home/claude/workspaces",
-			WorkspaceHostRoot:   "/home/claude/workspaces",
-			CredentialsHostPath: "",
-			SettingsHostPath:    "",
-			SleeveImage:         "ghcr.io/hotschmoe/protectorate-sleeve:latest",
+			Network:             getEnv("DOCKER_NETWORK", "raven"),
+			WorkspaceRoot:       getEnv("WORKSPACE_ROOT", "/home/claude/workspaces"),
+			WorkspaceHostRoot:   getEnv("WORKSPACE_HOST_ROOT", ""),
+			CredentialsHostPath: getEnv("CREDENTIALS_HOST_PATH", ""),
+			SettingsHostPath:    getEnv("SETTINGS_HOST_PATH", ""),
+			PluginsHostPath:     getEnv("PLUGINS_HOST_PATH", ""),
+			SleeveImage:         getEnv("SLEEVE_IMAGE", "ghcr.io/hotschmoe/protectorate-sleeve:latest"),
 		},
 		Gitea: GiteaConfig{
-			URL: "http://gitea:3000",
+			URL:      getEnv("GITEA_URL", "http://gitea:3000"),
+			User:     getEnv("GITEA_USER", ""),
+			Password: getEnv("GITEA_PASSWORD", ""),
+			Token:    getEnv("GITEA_TOKEN", ""),
 		},
 		Mirror: MirrorConfig{
-			Enabled:   false,
-			Frequency: "daily",
+			Enabled:   getEnvBool("MIRROR_ENABLED", false),
+			Frequency: getEnv("MIRROR_FREQUENCY", "daily"),
+			GitHubOrg: getEnv("MIRROR_GITHUB_ORG", ""),
+			Token:     getEnv("MIRROR_GITHUB_TOKEN", ""),
 		},
 	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return config, nil
-		}
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	var root yaml.Node
-	if err := yaml.Unmarshal(data, &root); err != nil {
-		return nil, fmt.Errorf("failed to parse YAML: %w", err)
-	}
-
-	expandEnvInConfig(&root)
-
-	expandedData, err := yaml.Marshal(&root)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal expanded YAML: %w", err)
-	}
-
-	if err := yaml.Unmarshal(expandedData, config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
-	}
-
-	return config, nil
 }
-

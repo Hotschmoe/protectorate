@@ -35,4 +35,4 @@ su - claude -c "tmux new-session -d -s $TMUX_SESSION"
 ttyd --port 7681 --writable /usr/local/bin/tmux-session.sh &
 
 # Run envoy (needs Docker socket access, runs as root)
-exec envoy --config /etc/envoy/envoy.yaml
+exec envoy
