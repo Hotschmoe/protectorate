@@ -113,8 +113,15 @@ func (wm *WorkspaceManager) Clone(req protocol.CloneWorkspaceRequest) (*protocol
 		return nil, fmt.Errorf("repo_url required")
 	}
 
-	if !strings.HasPrefix(req.RepoURL, "https://") {
-		return nil, fmt.Errorf("only HTTPS URLs are supported")
+	// Accept HTTPS or SSH URLs
+	if !strings.HasPrefix(req.RepoURL, "https://") && !strings.HasPrefix(req.RepoURL, "git@") {
+		return nil, fmt.Errorf("URL must start with https:// or git@")
+	}
+
+	// Convert to SSH if configured (default)
+	cloneURL := req.RepoURL
+	if os.Getenv("GIT_CLONE_PROTOCOL") != "https" && strings.HasPrefix(req.RepoURL, "https://") {
+		cloneURL = convertToSSHURL(req.RepoURL)
 	}
 
 	wsName := req.Name
@@ -134,7 +141,7 @@ func (wm *WorkspaceManager) Clone(req protocol.CloneWorkspaceRequest) (*protocol
 	jobID := generateJobID()
 	job := &protocol.CloneJob{
 		ID:        jobID,
-		RepoURL:   req.RepoURL,
+		RepoURL:   cloneURL, // Use converted URL (SSH if configured)
 		Workspace: wsPath,
 		Status:    "cloning",
 		StartTime: time.Now(),
@@ -202,6 +209,41 @@ func repoNameFromURL(url string) string {
 		return parts[len(parts)-1]
 	}
 	return ""
+}
+
+// convertToSSHURL converts HTTPS GitHub/GitLab URLs to SSH format
+// https://github.com/user/repo.git -> git@github.com:user/repo.git
+// https://gitlab.com/user/repo.git -> git@gitlab.com:user/repo.git
+func convertToSSHURL(url string) string {
+	url = strings.TrimSuffix(url, "/")
+	if !strings.HasSuffix(url, ".git") {
+		url = url + ".git"
+	}
+
+	// Handle github.com
+	if strings.HasPrefix(url, "https://github.com/") {
+		path := strings.TrimPrefix(url, "https://github.com/")
+		return "git@github.com:" + path
+	}
+
+	// Handle gitlab.com
+	if strings.HasPrefix(url, "https://gitlab.com/") {
+		path := strings.TrimPrefix(url, "https://gitlab.com/")
+		return "git@gitlab.com:" + path
+	}
+
+	// Handle generic https://host/path format
+	if strings.HasPrefix(url, "https://") {
+		remainder := strings.TrimPrefix(url, "https://")
+		slashIdx := strings.Index(remainder, "/")
+		if slashIdx > 0 {
+			host := remainder[:slashIdx]
+			path := remainder[slashIdx+1:]
+			return "git@" + host + ":" + path
+		}
+	}
+
+	return url
 }
 
 func cloneRepo(url, destPath string) error {
