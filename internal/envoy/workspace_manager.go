@@ -583,13 +583,20 @@ func (wm *WorkspaceManager) CommitAll(wsPath, message string) (*protocol.FetchRe
 		}, nil
 	}
 
-	// Commit with envoy identity
-	cmd := exec.Command("git",
-		"-c", "safe.directory="+wsPath,
-		"-C", wsPath,
-		"-c", "user.email=envoy@protectorate.local",
-		"-c", "user.name=Protectorate Envoy",
-		"commit", "-m", message)
+	// Build commit command - use env vars if set, otherwise rely on mounted ~/.gitconfig
+	args := []string{"-c", "safe.directory=" + wsPath, "-C", wsPath}
+
+	gitName := os.Getenv("GIT_COMMITTER_NAME")
+	gitEmail := os.Getenv("GIT_COMMITTER_EMAIL")
+	if gitName != "" {
+		args = append(args, "-c", "user.name="+gitName)
+	}
+	if gitEmail != "" {
+		args = append(args, "-c", "user.email="+gitEmail)
+	}
+	args = append(args, "commit", "-m", message)
+
+	cmd := exec.Command("git", args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return &protocol.FetchResult{
 			Success: false,

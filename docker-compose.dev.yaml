@@ -37,6 +37,9 @@ services:
       - ${HOME}/.claude.json:/etc/claude/settings.json:ro
       - ${HOME}/.claude/plugins:/home/claude/.claude/plugins:ro
 
+      # Git config from host (for commit identity)
+      - ${HOME}/.gitconfig:/root/.gitconfig:ro
+
       # Workspaces (all sleeve directories visible here)
       - ./workspaces:/home/claude/workspaces
 
@@ -47,6 +50,11 @@ services:
       - CREDENTIALS_HOST_PATH=${HOME}/.claude/.credentials.json
       - SETTINGS_HOST_PATH=${HOME}/.claude.json
       - PLUGINS_HOST_PATH=${HOME}/.claude/plugins
+      # Git identity for envoy commits (optional - falls back to Protectorate Envoy)
+      # Set GIT_COMMITTER_NAME and GIT_COMMITTER_EMAIL in .env to use your identity
+      # Or add volume mount for host gitconfig: - ${HOME}/.gitconfig:/home/claude/.gitconfig:ro
+      - GIT_COMMITTER_NAME=${GIT_COMMITTER_NAME:-}
+      - GIT_COMMITTER_EMAIL=${GIT_COMMITTER_EMAIL:-}
     networks:
       - raven
     user: root
