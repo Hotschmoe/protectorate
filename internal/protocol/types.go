@@ -17,7 +17,23 @@ type SleeveInfo struct {
 type SpawnSleeveRequest struct {
 	Workspace string `json:"workspace"`
 	Name      string `json:"name,omitempty"`
-	RepoURL   string `json:"repo_url,omitempty"`
+}
+
+// CloneWorkspaceRequest is the request body for cloning a git repo into a workspace
+type CloneWorkspaceRequest struct {
+	RepoURL string `json:"repo_url"`
+	Name    string `json:"name,omitempty"`
+}
+
+// CloneJob represents an async clone operation
+type CloneJob struct {
+	ID        string    `json:"id"`
+	RepoURL   string    `json:"repo_url"`
+	Workspace string    `json:"workspace"`
+	Status    string    `json:"status"` // pending, cloning, completed, failed
+	Error     string    `json:"error,omitempty"`
+	StartTime time.Time `json:"start_time"`
+	EndTime   time.Time `json:"end_time,omitempty"`
 }
 
 // WorkspaceInfo represents a workspace directory

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/hotschmoe/protectorate/internal/protocol"
@@ -164,7 +163,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleWorkspaces(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		workspaces, err := s.listWorkspaces()
+		workspaces, err := s.workspaces.List()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -181,69 +180,57 @@ func (s *Server) handleWorkspaces(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if req.Name == "" {
-			http.Error(w, "workspace name required", http.StatusBadRequest)
-			return
-		}
-
-		if strings.ContainsAny(req.Name, "/\\..") {
-			http.Error(w, "invalid workspace name", http.StatusBadRequest)
-			return
-		}
-
-		wsPath := filepath.Join(s.cfg.Docker.WorkspaceRoot, req.Name)
-		if err := os.MkdirAll(wsPath, 0755); err != nil {
-			http.Error(w, "failed to create workspace: "+err.Error(), http.StatusInternalServerError)
+		ws, err := s.workspaces.Create(req.Name)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(protocol.WorkspaceInfo{
-			Name:  req.Name,
-			Path:  wsPath,
-			InUse: false,
-		})
+		json.NewEncoder(w).Encode(ws)
 
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-func (s *Server) listWorkspaces() ([]protocol.WorkspaceInfo, error) {
-	wsRoot := s.cfg.Docker.WorkspaceRoot
-
-	if err := os.MkdirAll(wsRoot, 0755); err != nil {
-		return nil, err
-	}
-
-	entries, err := os.ReadDir(wsRoot)
-	if err != nil {
-		return nil, err
-	}
-
-	sleeves := s.sleeves.List()
-	wsToSleeve := make(map[string]string)
-	for _, sl := range sleeves {
-		wsToSleeve[sl.Workspace] = sl.Name
-	}
-
-	workspaces := make([]protocol.WorkspaceInfo, 0)
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
+func (s *Server) handleCloneWorkspace(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		jobID := r.URL.Query().Get("id")
+		if jobID == "" {
+			http.Error(w, "job id required", http.StatusBadRequest)
+			return
 		}
 
-		wsPath := filepath.Join(wsRoot, entry.Name())
-		sleeveName := wsToSleeve[wsPath]
+		job, err := s.workspaces.GetJob(jobID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
 
-		workspaces = append(workspaces, protocol.WorkspaceInfo{
-			Name:       entry.Name(),
-			Path:       wsPath,
-			InUse:      sleeveName != "",
-			SleeveName: sleeveName,
-		})
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(job)
+
+	case http.MethodPost:
+		var req protocol.CloneWorkspaceRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		job, err := s.workspaces.Clone(req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(job)
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
-
-	return workspaces, nil
 }

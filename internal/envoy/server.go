@@ -10,10 +10,11 @@ import (
 )
 
 type Server struct {
-	cfg       *config.EnvoyConfig
-	http      *http.Server
-	docker    *DockerClient
-	sleeves   *SleeveManager
+	cfg        *config.EnvoyConfig
+	http       *http.Server
+	docker     *DockerClient
+	sleeves    *SleeveManager
+	workspaces *WorkspaceManager
 }
 
 func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
@@ -23,15 +24,17 @@ func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
 	}
 
 	sleeves := NewSleeveManager(docker, cfg)
+	workspaces := NewWorkspaceManager(cfg, sleeves.List)
 
 	if err := sleeves.RecoverSleeves(); err != nil {
 		return nil, fmt.Errorf("failed to recover sleeves: %w", err)
 	}
 
 	s := &Server{
-		cfg:     cfg,
-		docker:  docker,
-		sleeves: sleeves,
+		cfg:        cfg,
+		docker:     docker,
+		sleeves:    sleeves,
+		workspaces: workspaces,
 	}
 
 	mux := http.NewServeMux()
@@ -53,6 +56,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/docker/containers", s.handleDockerContainers)
 	mux.HandleFunc("/api/docker/networks", s.handleDockerNetworks)
 	mux.HandleFunc("/api/workspaces", s.handleWorkspaces)
+	mux.HandleFunc("/api/workspaces/clone", s.handleCloneWorkspace)
 	mux.HandleFunc("/api/sleeves", s.handleSleeves)
 	mux.HandleFunc("/api/sleeves/", s.handleSleeveByName)
 	mux.HandleFunc("/sleeves/", s.handleSleeveTerminal)

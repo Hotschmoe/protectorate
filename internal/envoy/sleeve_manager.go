@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -81,46 +79,15 @@ func (m *SleeveManager) toHostPath(containerPath string) string {
 	return containerPath
 }
 
-func repoNameFromURL(url string) string {
-	url = strings.TrimSuffix(url, ".git")
-	url = strings.TrimSuffix(url, "/")
-	parts := strings.Split(url, "/")
-	if len(parts) > 0 {
-		return parts[len(parts)-1]
-	}
-	return ""
-}
-
-func cloneRepo(url, destPath string) error {
-	cmd := exec.Command("git", "clone", url, destPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
 func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.SleeveInfo, error) {
 	workspace := req.Workspace
 
-	if req.RepoURL != "" {
-		if workspace == "" {
-			repoName := repoNameFromURL(req.RepoURL)
-			if repoName == "" {
-				return nil, fmt.Errorf("could not derive workspace name from repo URL")
-			}
-			workspace = filepath.Join(m.cfg.Docker.WorkspaceRoot, repoName)
-		}
-
-		if _, err := os.Stat(workspace); err == nil {
-			return nil, fmt.Errorf("workspace %q already exists", workspace)
-		}
-
-		if err := cloneRepo(req.RepoURL, workspace); err != nil {
-			return nil, fmt.Errorf("failed to clone repo: %w", err)
-		}
-	}
-
 	if workspace == "" {
 		return nil, fmt.Errorf("workspace path required")
+	}
+
+	if _, err := os.Stat(workspace); os.IsNotExist(err) {
+		return nil, fmt.Errorf("workspace %q does not exist", workspace)
 	}
 
 	name := req.Name

@@ -38,6 +38,27 @@
             background: #f85149;
         }
         .auth-indicator.authenticated { background: #3fb950; }
+        .tabs {
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            padding: 0 2rem;
+            display: flex;
+            gap: 0;
+        }
+        .tab {
+            padding: 0.75rem 1.5rem;
+            color: #8b949e;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.15s;
+        }
+        .tab:hover { color: #c9d1d9; }
+        .tab.active {
+            color: #c9d1d9;
+            border-bottom-color: #f78166;
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
         .main {
             padding: 2rem;
             display: grid;
@@ -68,6 +89,11 @@
             font-size: 0.875rem;
         }
         .btn:hover { background: #2ea043; }
+        .btn:disabled {
+            background: #21262d;
+            color: #6e7681;
+            cursor: not-allowed;
+        }
         .btn-danger { background: #da3633; }
         .btn-danger:hover { background: #f85149; }
         .btn-secondary {
@@ -87,6 +113,9 @@
         th { color: #8b949e; font-weight: 500; }
         .status-running { color: #3fb950; }
         .status-exited { color: #8b949e; }
+        .status-available { color: #3fb950; }
+        .status-in-use { color: #d29922; }
+        .status-cloning { color: #58a6ff; }
         .sleeves-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -131,6 +160,7 @@
             border-radius: 6px;
             padding: 2rem;
             width: 400px;
+            position: relative;
         }
         .modal-title {
             font-size: 1.25rem;
@@ -207,7 +237,6 @@
             color: #8b949e;
             font-size: 0.9rem;
         }
-        .modal-content { position: relative; }
         .radio-group {
             display: flex;
             gap: 1rem;
@@ -231,12 +260,6 @@
         .form-select option { background: #0d1117; }
         .form-select option:disabled { color: #6e7681; }
         .hidden { display: none; }
-        .ws-status {
-            font-size: 0.75rem;
-            color: #8b949e;
-            margin-left: 0.5rem;
-        }
-        .ws-status.in-use { color: #f85149; }
         .terminal-status {
             display: inline-block;
             width: 8px;
@@ -256,6 +279,11 @@
             color: #8b949e;
             margin-left: 0.5rem;
         }
+        .error-text {
+            color: #f85149;
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+        }
     </style>
 </head>
 <body>
@@ -270,57 +298,90 @@
         </div>
     </header>
 
-    <main class="main">
-        <div class="panel">
-            <div class="panel-header">
-                <span class="panel-title">Docker Containers</span>
-                <button class="btn btn-secondary" onclick="refreshContainers()">Refresh</button>
-            </div>
-            <div class="panel-body">
-                <table id="containers-table">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Image</th>
-                            <th>Version</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        </div>
+    <nav class="tabs">
+        <div class="tab active" onclick="switchTab('dashboard')">Dashboard</div>
+        <div class="tab" onclick="switchTab('workspaces')">Workspaces</div>
+    </nav>
 
-        <div class="panel">
-            <div class="panel-header">
-                <span class="panel-title">Docker Networks</span>
-            </div>
-            <div class="panel-body">
-                <table id="networks-table">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Driver</th>
-                            <th>Scope</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="panel full-width">
-            <div class="panel-header">
-                <span class="panel-title">Sleeves</span>
-                <button class="btn" onclick="showSpawnModal()">+ Spawn Sleeve</button>
-            </div>
-            <div class="panel-body">
-                <div id="sleeves-grid" class="sleeves-grid">
-                    <div class="empty-state">No sleeves running. Click "+ Spawn Sleeve" to create one.</div>
+    <div id="tab-dashboard" class="tab-content active">
+        <main class="main">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">Docker Containers</span>
+                    <button class="btn btn-secondary" onclick="refreshContainers()">Refresh</button>
+                </div>
+                <div class="panel-body">
+                    <table id="containers-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Image</th>
+                                <th>Version</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
                 </div>
             </div>
-        </div>
-    </main>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">Docker Networks</span>
+                </div>
+                <div class="panel-body">
+                    <table id="networks-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Driver</th>
+                                <th>Scope</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="panel full-width">
+                <div class="panel-header">
+                    <span class="panel-title">Sleeves</span>
+                    <button class="btn" onclick="showSpawnModal()">+ Spawn Sleeve</button>
+                </div>
+                <div class="panel-body">
+                    <div id="sleeves-grid" class="sleeves-grid">
+                        <div class="empty-state">No sleeves running. Click "+ Spawn Sleeve" to create one.</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="tab-workspaces" class="tab-content">
+        <main class="main">
+            <div class="panel full-width">
+                <div class="panel-header">
+                    <span class="panel-title">Workspaces</span>
+                    <button class="btn" onclick="showCloneModal()">+ Clone from Git</button>
+                </div>
+                <div class="panel-body">
+                    <table id="workspaces-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Status</th>
+                                <th>Sleeve</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                    <div id="workspaces-empty" class="empty-state hidden">
+                        No workspaces yet. Click "+ Clone from Git" to clone a repository.
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
 
     <div id="spawn-modal" class="modal">
         <div class="modal-content">
@@ -334,35 +395,26 @@
                     <label class="form-label">Workspace</label>
                     <div class="radio-group">
                         <label class="radio-option">
-                            <input type="radio" name="ws-mode" value="new" checked onchange="toggleWorkspaceMode()">
-                            Create new
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="ws-mode" value="existing" onchange="toggleWorkspaceMode()">
+                            <input type="radio" name="ws-mode" value="existing" checked onchange="toggleWorkspaceMode()">
                             Use existing
                         </label>
                         <label class="radio-option">
-                            <input type="radio" name="ws-mode" value="clone" onchange="toggleWorkspaceMode()">
-                            Clone from Git
+                            <input type="radio" name="ws-mode" value="new" onchange="toggleWorkspaceMode()">
+                            Create new
                         </label>
                     </div>
                 </div>
-                <div class="form-group" id="new-ws-group">
+                <div class="form-group" id="existing-ws-group">
+                    <label class="form-label">Select Workspace</label>
+                    <select class="form-select" id="existing-workspace-select" required>
+                        <option value="">Loading...</option>
+                    </select>
+                </div>
+                <div class="form-group hidden" id="new-ws-group">
                     <label class="form-label">Workspace Name</label>
                     <input type="text" class="form-input" id="new-workspace-input"
                            placeholder="my-project" pattern="[a-zA-Z0-9_-]+"
                            title="Letters, numbers, dashes, underscores only">
-                </div>
-                <div class="form-group hidden" id="existing-ws-group">
-                    <label class="form-label">Select Workspace</label>
-                    <select class="form-select" id="existing-workspace-select">
-                        <option value="">Loading...</option>
-                    </select>
-                </div>
-                <div class="form-group hidden" id="clone-ws-group">
-                    <label class="form-label">Repository URL</label>
-                    <input type="text" class="form-input" id="repo-url-input"
-                           placeholder="https://github.com/owner/repo">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Sleeve Name (optional)</label>
@@ -372,6 +424,38 @@
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="hideSpawnModal()">Cancel</button>
                     <button type="submit" class="btn">Spawn</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="clone-modal" class="modal">
+        <div class="modal-content">
+            <div id="clone-loading" class="spawn-loading">
+                <div class="spinner"></div>
+                <div class="clone-loading-text">Cloning repository...</div>
+            </div>
+            <h2 class="modal-title">Clone Repository</h2>
+            <form id="clone-form" onsubmit="cloneWorkspace(event)">
+                <div class="form-group">
+                    <label class="form-label">Repository URL</label>
+                    <input type="url" class="form-input" id="clone-url-input"
+                           placeholder="https://github.com/owner/repo"
+                           pattern="https://.*"
+                           title="HTTPS URLs only"
+                           required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Workspace Name (optional)</label>
+                    <input type="text" class="form-input" id="clone-name-input"
+                           placeholder="Auto-derived from repo URL"
+                           pattern="[a-zA-Z0-9_-]*"
+                           title="Letters, numbers, dashes, underscores only">
+                </div>
+                <div id="clone-error" class="error-text hidden"></div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="hideCloneModal()">Cancel</button>
+                    <button type="submit" class="btn" id="clone-submit-btn">Clone</button>
                 </div>
             </form>
         </div>
@@ -395,9 +479,11 @@
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
     <script>
         let currentConnection = null;
+        let currentCloneJobId = null;
+        let clonePollingInterval = null;
 
-        const TTYD_INPUT = 48;   // '0' - terminal input
-        const TTYD_RESIZE = 49;  // '1' - resize command
+        const TTYD_INPUT = 48;
+        const TTYD_RESIZE = 49;
 
         function buildTtydMessage(type, data) {
             const msg = new Uint8Array(data.length + 1);
@@ -406,6 +492,17 @@
                 msg[i + 1] = data.charCodeAt(i);
             }
             return msg.buffer;
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelector(`.tab:nth-child(${tabName === 'dashboard' ? 1 : 2})`).classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+
+            if (tabName === 'workspaces') {
+                refreshWorkspacesTable();
+            }
         }
 
         class TerminalConnection {
@@ -666,34 +763,68 @@
             }
         }
 
+        async function refreshWorkspacesTable() {
+            try {
+                const resp = await fetch('/api/workspaces');
+                const workspaces = await resp.json();
+                const tbody = document.querySelector('#workspaces-table tbody');
+                const emptyState = document.getElementById('workspaces-empty');
+                const table = document.getElementById('workspaces-table');
+
+                if (workspaces.length === 0) {
+                    table.classList.add('hidden');
+                    emptyState.classList.remove('hidden');
+                    return;
+                }
+
+                table.classList.remove('hidden');
+                emptyState.classList.add('hidden');
+
+                tbody.innerHTML = workspaces.map(ws => {
+                    let status, statusClass;
+                    if (ws.in_use) {
+                        status = 'In Use';
+                        statusClass = 'status-in-use';
+                    } else {
+                        status = 'Available';
+                        statusClass = 'status-available';
+                    }
+                    return `
+                    <tr>
+                        <td>${ws.name}</td>
+                        <td class="${statusClass}">${status}</td>
+                        <td>${ws.sleeve_name || '-'}</td>
+                    </tr>
+                    `;
+                }).join('');
+            } catch (e) {
+                console.error('Failed to fetch workspaces:', e);
+            }
+        }
+
         function updateWorkspaceSelect() {
             const select = document.getElementById('existing-workspace-select');
-            if (workspacesCache.length === 0) {
-                select.innerHTML = '<option value="">No workspaces available</option>';
+            const available = workspacesCache.filter(ws => !ws.in_use);
+            if (available.length === 0) {
+                select.innerHTML = '<option value="">No available workspaces</option>';
                 return;
             }
-            select.innerHTML = workspacesCache.map(ws => {
-                const disabled = ws.in_use ? 'disabled' : '';
-                const status = ws.in_use ? ` (in use by ${ws.sleeve_name})` : '';
-                return `<option value="${ws.path}" ${disabled}>${ws.name}${status}</option>`;
-            }).join('');
+            select.innerHTML = available.map(ws =>
+                `<option value="${ws.path}">${ws.name}</option>`
+            ).join('');
         }
 
         function toggleWorkspaceMode() {
             const mode = document.querySelector('input[name="ws-mode"]:checked').value;
             const newGroup = document.getElementById('new-ws-group');
             const existingGroup = document.getElementById('existing-ws-group');
-            const cloneGroup = document.getElementById('clone-ws-group');
             const newInput = document.getElementById('new-workspace-input');
             const existingSelect = document.getElementById('existing-workspace-select');
-            const repoUrlInput = document.getElementById('repo-url-input');
 
             newGroup.classList.add('hidden');
             existingGroup.classList.add('hidden');
-            cloneGroup.classList.add('hidden');
             newInput.required = false;
             existingSelect.required = false;
-            repoUrlInput.required = false;
 
             if (mode === 'new') {
                 newGroup.classList.remove('hidden');
@@ -701,9 +832,6 @@
             } else if (mode === 'existing') {
                 existingGroup.classList.remove('hidden');
                 existingSelect.required = true;
-            } else if (mode === 'clone') {
-                cloneGroup.classList.remove('hidden');
-                repoUrlInput.required = true;
             }
         }
 
@@ -729,12 +857,104 @@
             document.getElementById('spawn-loading').classList.remove('active');
         }
 
+        function showCloneModal() {
+            document.getElementById('clone-modal').classList.add('active');
+            document.getElementById('clone-error').classList.add('hidden');
+        }
+
+        function hideCloneModal() {
+            document.getElementById('clone-modal').classList.remove('active');
+            document.getElementById('clone-form').reset();
+            document.getElementById('clone-error').classList.add('hidden');
+            hideCloneLoading();
+            stopClonePolling();
+        }
+
+        function showCloneLoading(msg) {
+            document.querySelector('.clone-loading-text').textContent = msg || 'Cloning repository...';
+            document.getElementById('clone-loading').classList.add('active');
+            document.getElementById('clone-submit-btn').disabled = true;
+        }
+
+        function hideCloneLoading() {
+            document.getElementById('clone-loading').classList.remove('active');
+            document.getElementById('clone-submit-btn').disabled = false;
+        }
+
+        function stopClonePolling() {
+            if (clonePollingInterval) {
+                clearInterval(clonePollingInterval);
+                clonePollingInterval = null;
+            }
+            currentCloneJobId = null;
+        }
+
+        async function cloneWorkspace(e) {
+            e.preventDefault();
+            const repoUrl = document.getElementById('clone-url-input').value;
+            const name = document.getElementById('clone-name-input').value;
+
+            if (!repoUrl) {
+                alert('Please enter a repository URL');
+                return;
+            }
+
+            showCloneLoading('Starting clone...');
+            document.getElementById('clone-error').classList.add('hidden');
+
+            try {
+                const resp = await fetch('/api/workspaces/clone', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ repo_url: repoUrl, name: name || undefined })
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    document.getElementById('clone-error').textContent = err;
+                    document.getElementById('clone-error').classList.remove('hidden');
+                    hideCloneLoading();
+                    return;
+                }
+
+                const job = await resp.json();
+                currentCloneJobId = job.id;
+                showCloneLoading('Cloning repository...');
+
+                clonePollingInterval = setInterval(async () => {
+                    try {
+                        const statusResp = await fetch(`/api/workspaces/clone?id=${currentCloneJobId}`);
+                        const jobStatus = await statusResp.json();
+
+                        if (jobStatus.status === 'completed') {
+                            stopClonePolling();
+                            hideCloneLoading();
+                            hideCloneModal();
+                            refreshWorkspacesTable();
+                            refreshWorkspaces();
+                        } else if (jobStatus.status === 'failed') {
+                            stopClonePolling();
+                            hideCloneLoading();
+                            document.getElementById('clone-error').textContent = jobStatus.error || 'Clone failed';
+                            document.getElementById('clone-error').classList.remove('hidden');
+                        }
+                    } catch (pollErr) {
+                        console.error('Failed to poll clone status:', pollErr);
+                    }
+                }, 1000);
+
+            } catch (e) {
+                hideCloneLoading();
+                document.getElementById('clone-error').textContent = e.message;
+                document.getElementById('clone-error').classList.remove('hidden');
+            }
+        }
+
         async function spawnSleeve(e) {
             e.preventDefault();
             const mode = document.querySelector('input[name="ws-mode"]:checked').value;
             const name = document.getElementById('name-input').value;
             let workspace;
-            let repoUrl;
 
             try {
                 if (mode === 'new') {
@@ -763,21 +983,10 @@
                         alert('Please select a workspace');
                         return;
                     }
-                } else if (mode === 'clone') {
-                    repoUrl = document.getElementById('repo-url-input').value;
-                    if (!repoUrl) {
-                        alert('Please enter a repository URL');
-                        return;
-                    }
                 }
 
-                showSpawnLoading(repoUrl ? 'Cloning repository...' : 'Spawning sleeve...');
-                const body = { name: name || undefined };
-                if (repoUrl) {
-                    body.repo_url = repoUrl;
-                } else {
-                    body.workspace = workspace;
-                }
+                showSpawnLoading('Spawning sleeve...');
+                const body = { workspace, name: name || undefined };
                 const resp = await fetch('/api/sleeves', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
