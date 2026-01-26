@@ -14,6 +14,14 @@ RUN curl -fsSL "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION
     -o /usr/local/bin/ttyd \
     && chmod +x /usr/local/bin/ttyd
 
+ARG CSTACK_VERSION=1.0.0
+RUN curl -fsSL "https://github.com/Hotschmoe/cstack/releases/download/v${CSTACK_VERSION}/cstack-v${CSTACK_VERSION}-linux_amd64.tar.gz" \
+    -o /tmp/cstack.tar.gz \
+    && tar -xzf /tmp/cstack.tar.gz -C /tmp \
+    && mv /tmp/cs /usr/local/bin/cs \
+    && chmod +x /usr/local/bin/cs \
+    && rm /tmp/cstack.tar.gz
+
 RUN useradd -m -s /bin/bash -u 1000 claude \
     && mkdir -p /home/claude/.claude /etc/claude \
     && chown -R claude:claude /home/claude

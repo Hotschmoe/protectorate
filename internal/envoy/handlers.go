@@ -235,6 +235,50 @@ func (s *Server) handleCloneWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleWorkspaceCstack(w http.ResponseWriter, r *http.Request) {
+	workspace := r.URL.Query().Get("workspace")
+	if workspace == "" {
+		http.Error(w, "workspace parameter required", http.StatusBadRequest)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		stats := getCstackInfo(workspace)
+		if stats == nil {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]bool{"exists": false})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(stats)
+
+	case http.MethodPost:
+		action := r.URL.Query().Get("action")
+		if action != "init" {
+			http.Error(w, "action must be 'init'", http.StatusBadRequest)
+			return
+		}
+
+		var req protocol.CstackInitRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			req.Mode = "minimal"
+		}
+
+		result, err := s.workspaces.InitCstack(workspace, req.Mode)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
 func (s *Server) handleWorkspaceBranches(w http.ResponseWriter, r *http.Request) {
 	workspace := r.URL.Query().Get("workspace")
 	action := r.URL.Query().Get("action")

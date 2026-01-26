@@ -406,6 +406,7 @@
                                 <th>Name</th>
                                 <th>Branch</th>
                                 <th>Git Status</th>
+                                <th>Cstack</th>
                                 <th>Last Commit</th>
                                 <th>Sleeve</th>
                                 <th>Actions</th>
@@ -521,6 +522,47 @@
                 </div>
             </form>
             <input type="hidden" id="switch-ws-path">
+        </div>
+    </div>
+
+    <div id="cstack-init-modal" class="modal">
+        <div class="modal-content">
+            <h2 class="modal-title">Initialize Cstack</h2>
+            <p>Workspace: <strong id="cstack-init-ws-name"></strong></p>
+
+            <form id="cstack-init-form" onsubmit="initCstack(event)">
+                <div class="form-group">
+                    <label class="form-label">Choose initialization mode:</label>
+
+                    <div style="margin:0.75rem 0;padding:0.75rem;background:#0d1117;border:1px solid #30363d;border-radius:6px">
+                        <label style="display:flex;align-items:start;cursor:pointer">
+                            <input type="radio" name="cstack-mode" value="minimal" checked style="margin-top:4px">
+                            <div style="margin-left:0.5rem">
+                                <strong>Minimal</strong>
+                                <div style="color:#8b949e;font-size:0.85rem">Create empty .cstack/ directory</div>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div style="margin:0.75rem 0;padding:0.75rem;background:#0d1117;border:1px solid #30363d;border-radius:6px">
+                        <label style="display:flex;align-items:start;cursor:pointer">
+                            <input type="radio" name="cstack-mode" value="interview" style="margin-top:4px">
+                            <div style="margin-left:0.5rem">
+                                <strong>Interview (Recommended)</strong>
+                                <div style="color:#8b949e;font-size:0.85rem">Init + mark for Claude interview on sleeve spawn</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div id="cstack-init-error" class="error-text hidden"></div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="hideCstackInitModal()">Cancel</button>
+                    <button type="submit" class="btn" id="cstack-init-btn">Initialize</button>
+                </div>
+            </form>
+            <input type="hidden" id="cstack-init-ws-path">
         </div>
     </div>
 
@@ -880,6 +922,7 @@
                 tbody.innerHTML = workspaces.map(ws => {
                     const branch = formatGitBranch(ws.git);
                     const gitStatus = formatGitStatus(ws.git, ws.in_use);
+                    const cstackStatus = formatCstackStatus(ws.cstack, ws);
                     const lastCommit = formatLastCommit(ws.git);
                     const sleeve = ws.sleeve_name || '-';
                     const actions = formatWorkspaceActions(ws);
@@ -888,6 +931,7 @@
                         <td>${ws.name}</td>
                         <td>${branch}</td>
                         <td>${gitStatus}</td>
+                        <td>${cstackStatus}</td>
                         <td>${lastCommit}</td>
                         <td>${sleeve}</td>
                         <td>${actions}</td>
@@ -976,6 +1020,36 @@
                 <button class="btn btn-secondary btn-small" ${pullDisabled} title="${pullTitle}"
                         onclick="pullRemote('${escapedPath}', this)">Pull</button>
             </div>`;
+        }
+
+        function formatCstackStatus(cstack, ws) {
+            if (!cstack || !cstack.exists) {
+                const escapedPath = ws.path.replace(/'/g, "\\'");
+                return `<button class="btn btn-secondary btn-small"
+                        onclick="showCstackInitModal('${escapedPath}', '${ws.name}')">
+                    Init Stack
+                </button>`;
+            }
+
+            const parts = [];
+            if (cstack.ready > 0) {
+                parts.push(`<span style="color:#3fb950;font-weight:600">${cstack.ready} ready</span>`);
+            }
+            if (cstack.in_progress > 0) {
+                parts.push(`<span style="color:#58a6ff">${cstack.in_progress} active</span>`);
+            }
+            if (cstack.blocked > 0) {
+                parts.push(`<span style="color:#f85149">${cstack.blocked} blocked</span>`);
+            }
+            if (cstack.open > 0 && cstack.ready === 0 && cstack.in_progress === 0) {
+                parts.push(`<span style="color:#d29922">${cstack.open} open</span>`);
+            }
+
+            if (parts.length === 0) {
+                return `<span style="color:#8b949e">No tasks</span>`;
+            }
+
+            return parts.join(' / ');
         }
 
         let currentSwitchWsPath = '';
@@ -1160,6 +1234,60 @@
                 btn.textContent = originalText;
                 btn.disabled = false;
             }
+        }
+
+        function showCstackInitModal(wsPath, wsName) {
+            document.getElementById('cstack-init-ws-name').textContent = wsName;
+            document.getElementById('cstack-init-ws-path').value = wsPath;
+            document.getElementById('cstack-init-error').classList.add('hidden');
+            document.getElementById('cstack-init-modal').classList.add('active');
+        }
+
+        function hideCstackInitModal() {
+            document.getElementById('cstack-init-modal').classList.remove('active');
+            document.getElementById('cstack-init-form').reset();
+        }
+
+        async function initCstack(e) {
+            e.preventDefault();
+            const wsPath = document.getElementById('cstack-init-ws-path').value;
+            const mode = document.querySelector('input[name="cstack-mode"]:checked').value;
+            const btn = document.getElementById('cstack-init-btn');
+
+            btn.disabled = true;
+            btn.textContent = 'Initializing...';
+            document.getElementById('cstack-init-error').classList.add('hidden');
+
+            try {
+                const resp = await fetch(
+                    `/api/workspaces/cstack?workspace=${encodeURIComponent(wsPath)}&action=init`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ mode: mode })
+                    }
+                );
+
+                const result = await resp.json();
+
+                if (!result.success) {
+                    document.getElementById('cstack-init-error').textContent = result.error || 'Init failed';
+                    document.getElementById('cstack-init-error').classList.remove('hidden');
+                    btn.disabled = false;
+                    btn.textContent = 'Initialize';
+                    return;
+                }
+
+                hideCstackInitModal();
+                refreshWorkspacesTable();
+
+            } catch (e) {
+                document.getElementById('cstack-init-error').textContent = e.message;
+                document.getElementById('cstack-init-error').classList.remove('hidden');
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Initialize';
         }
 
         function updateWorkspaceSelect() {

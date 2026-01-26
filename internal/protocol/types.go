@@ -43,6 +43,30 @@ type WorkspaceInfo struct {
 	InUse      bool              `json:"in_use"`
 	SleeveName string            `json:"sleeve_name,omitempty"`
 	Git        *WorkspaceGitInfo `json:"git,omitempty"`
+	Cstack     *CstackStats      `json:"cstack,omitempty"`
+}
+
+// CstackStats represents task statistics from cs stats --json
+type CstackStats struct {
+	Open       int  `json:"open"`
+	Ready      int  `json:"ready"`
+	InProgress int  `json:"in_progress"`
+	Blocked    int  `json:"blocked"`
+	Closed     int  `json:"closed"`
+	Total      int  `json:"total"`
+	Exists     bool `json:"exists"`
+}
+
+// CstackInitRequest is the request body for initializing cstack
+type CstackInitRequest struct {
+	Mode string `json:"mode"`
+}
+
+// CstackInitResult is the response from cstack init
+type CstackInitResult struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 // WorkspaceGitInfo contains git repository information for a workspace

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -69,6 +70,10 @@ func (wm *WorkspaceManager) List() ([]protocol.WorkspaceInfo, error) {
 
 		if gitInfo := getGitInfo(wsPath); gitInfo != nil {
 			ws.Git = gitInfo
+		}
+
+		if cstackInfo := getCstackInfo(wsPath); cstackInfo != nil {
+			ws.Cstack = cstackInfo
 		}
 
 		workspaces = append(workspaces, ws)
@@ -312,6 +317,70 @@ func runGitCommand(wsPath string, args ...string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+func getCstackInfo(wsPath string) *protocol.CstackStats {
+	cstackDir := filepath.Join(wsPath, ".cstack")
+	if _, err := os.Stat(cstackDir); os.IsNotExist(err) {
+		return nil
+	}
+
+	cmd := exec.Command("cs", "stats", "--json")
+	cmd.Dir = wsPath
+	out, err := cmd.Output()
+	if err != nil {
+		return &protocol.CstackStats{Exists: true}
+	}
+
+	var stats protocol.CstackStats
+	if err := json.Unmarshal(out, &stats); err != nil {
+		return &protocol.CstackStats{Exists: true}
+	}
+
+	stats.Exists = true
+	return &stats
+}
+
+// InitCstack initializes cstack in a workspace
+func (wm *WorkspaceManager) InitCstack(wsPath, mode string) (*protocol.CstackInitResult, error) {
+	if _, err := os.Stat(wsPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("workspace not found: %s", wsPath)
+	}
+
+	cstackDir := filepath.Join(wsPath, ".cstack")
+	if _, err := os.Stat(cstackDir); err == nil {
+		return &protocol.CstackInitResult{
+			Success: false,
+			Error:   "cstack already initialized",
+		}, nil
+	}
+
+	cmd := exec.Command("cs", "init")
+	cmd.Dir = wsPath
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return &protocol.CstackInitResult{
+			Success: false,
+			Error:   string(out),
+		}, nil
+	}
+
+	if mode == "interview" {
+		marker := filepath.Join(cstackDir, "INTERVIEW_PENDING.md")
+		content := `# Cstack Interview Pending
+
+This workspace needs project context setup. When a sleeve spawns,
+Claude should run the cstack interview to gather project context.
+
+See: /interview command or ask Claude to interview about the project.
+`
+		os.WriteFile(marker, []byte(content), 0644)
+	}
+
+	return &protocol.CstackInitResult{
+		Success: true,
+		Message: "cstack initialized",
+	}, nil
 }
 
 // IsWorkspaceInUse checks if workspace is mounted to a running sleeve
