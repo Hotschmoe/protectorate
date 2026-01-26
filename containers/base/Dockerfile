@@ -18,7 +18,7 @@ ARG CSTACK_VERSION=1.0.0
 RUN curl -fsSL "https://github.com/Hotschmoe/cstack/releases/download/v${CSTACK_VERSION}/cstack-v${CSTACK_VERSION}-linux_amd64.tar.gz" \
     -o /tmp/cstack.tar.gz \
     && tar -xzf /tmp/cstack.tar.gz -C /tmp \
-    && mv /tmp/cs /usr/local/bin/cs \
+    && mv /tmp/cstack /usr/local/bin/cs \
     && chmod +x /usr/local/bin/cs \
     && rm /tmp/cstack.tar.gz
 
