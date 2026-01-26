@@ -341,6 +341,10 @@
                             <input type="radio" name="ws-mode" value="existing" onchange="toggleWorkspaceMode()">
                             Use existing
                         </label>
+                        <label class="radio-option">
+                            <input type="radio" name="ws-mode" value="clone" onchange="toggleWorkspaceMode()">
+                            Clone from Git
+                        </label>
                     </div>
                 </div>
                 <div class="form-group" id="new-ws-group">
@@ -354,6 +358,11 @@
                     <select class="form-select" id="existing-workspace-select">
                         <option value="">Loading...</option>
                     </select>
+                </div>
+                <div class="form-group hidden" id="clone-ws-group">
+                    <label class="form-label">Repository URL</label>
+                    <input type="text" class="form-input" id="repo-url-input"
+                           placeholder="https://github.com/owner/repo">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Sleeve Name (optional)</label>
@@ -674,19 +683,27 @@
             const mode = document.querySelector('input[name="ws-mode"]:checked').value;
             const newGroup = document.getElementById('new-ws-group');
             const existingGroup = document.getElementById('existing-ws-group');
+            const cloneGroup = document.getElementById('clone-ws-group');
             const newInput = document.getElementById('new-workspace-input');
             const existingSelect = document.getElementById('existing-workspace-select');
+            const repoUrlInput = document.getElementById('repo-url-input');
+
+            newGroup.classList.add('hidden');
+            existingGroup.classList.add('hidden');
+            cloneGroup.classList.add('hidden');
+            newInput.required = false;
+            existingSelect.required = false;
+            repoUrlInput.required = false;
 
             if (mode === 'new') {
                 newGroup.classList.remove('hidden');
-                existingGroup.classList.add('hidden');
                 newInput.required = true;
-                existingSelect.required = false;
-            } else {
-                newGroup.classList.add('hidden');
+            } else if (mode === 'existing') {
                 existingGroup.classList.remove('hidden');
-                newInput.required = false;
                 existingSelect.required = true;
+            } else if (mode === 'clone') {
+                cloneGroup.classList.remove('hidden');
+                repoUrlInput.required = true;
             }
         }
 
@@ -717,6 +734,7 @@
             const mode = document.querySelector('input[name="ws-mode"]:checked').value;
             const name = document.getElementById('name-input').value;
             let workspace;
+            let repoUrl;
 
             try {
                 if (mode === 'new') {
@@ -739,19 +757,31 @@
                     }
                     const wsData = await createResp.json();
                     workspace = wsData.path;
-                } else {
+                } else if (mode === 'existing') {
                     workspace = document.getElementById('existing-workspace-select').value;
                     if (!workspace) {
                         alert('Please select a workspace');
                         return;
                     }
+                } else if (mode === 'clone') {
+                    repoUrl = document.getElementById('repo-url-input').value;
+                    if (!repoUrl) {
+                        alert('Please enter a repository URL');
+                        return;
+                    }
                 }
 
-                showSpawnLoading('Spawning sleeve...');
+                showSpawnLoading(repoUrl ? 'Cloning repository...' : 'Spawning sleeve...');
+                const body = { name: name || undefined };
+                if (repoUrl) {
+                    body.repo_url = repoUrl;
+                } else {
+                    body.workspace = workspace;
+                }
                 const resp = await fetch('/api/sleeves', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ workspace, name: name || undefined })
+                    body: JSON.stringify(body)
                 });
 
                 if (!resp.ok) {
