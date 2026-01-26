@@ -1036,6 +1036,7 @@
         let initializingCstackPaths = new Set();
 
         function formatCstackStatus(cstack, ws) {
+            console.log('formatCstackStatus checking:', ws.path, 'in set:', Array.from(initializingCstackPaths), 'has:', initializingCstackPaths.has(ws.path));
             if (initializingCstackPaths.has(ws.path)) {
                 return `<span style="color:#8b949e"><span class="inline-spinner"></span> Initializing...</span>`;
             }
@@ -1274,7 +1275,8 @@
             // Close modal immediately and show spinner in table
             hideCstackInitModal();
             initializingCstackPaths.add(wsPath);
-            refreshWorkspacesTable();
+            console.log('Added to initializing:', wsPath, 'Set now:', Array.from(initializingCstackPaths));
+            await refreshWorkspacesTable();
 
             try {
                 const resp = await fetch(
