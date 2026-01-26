@@ -6,14 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-)
 
-type WorkspaceInfo struct {
-	Name       string `json:"name"`
-	Path       string `json:"path"`
-	InUse      bool   `json:"in_use"`
-	SleeveName string `json:"sleeve_name,omitempty"`
-}
+	"github.com/hotschmoe/protectorate/internal/protocol"
+)
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -59,7 +54,7 @@ func (s *Server) handleSleeves(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(sleeves)
 
 	case http.MethodPost:
-		var req SpawnSleeveRequest
+		var req protocol.SpawnSleeveRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
@@ -204,7 +199,7 @@ func (s *Server) handleWorkspaces(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(WorkspaceInfo{
+		json.NewEncoder(w).Encode(protocol.WorkspaceInfo{
 			Name:  req.Name,
 			Path:  wsPath,
 			InUse: false,
@@ -215,7 +210,7 @@ func (s *Server) handleWorkspaces(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) listWorkspaces() ([]WorkspaceInfo, error) {
+func (s *Server) listWorkspaces() ([]protocol.WorkspaceInfo, error) {
 	wsRoot := s.cfg.Docker.WorkspaceRoot
 
 	if err := os.MkdirAll(wsRoot, 0755); err != nil {
@@ -233,7 +228,7 @@ func (s *Server) listWorkspaces() ([]WorkspaceInfo, error) {
 		wsToSleeve[sl.Workspace] = sl.Name
 	}
 
-	workspaces := make([]WorkspaceInfo, 0)
+	workspaces := make([]protocol.WorkspaceInfo, 0)
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -242,7 +237,7 @@ func (s *Server) listWorkspaces() ([]WorkspaceInfo, error) {
 		wsPath := filepath.Join(wsRoot, entry.Name())
 		sleeveName := wsToSleeve[wsPath]
 
-		workspaces = append(workspaces, WorkspaceInfo{
+		workspaces = append(workspaces, protocol.WorkspaceInfo{
 			Name:       entry.Name(),
 			Path:       wsPath,
 			InUse:      sleeveName != "",

@@ -3,6 +3,9 @@ package envoy
 import (
 	"fmt"
 	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +15,7 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/go-connections/nat"
 	"github.com/hotschmoe/protectorate/internal/config"
+	"github.com/hotschmoe/protectorate/internal/protocol"
 )
 
 var namePool = []string{
@@ -19,26 +23,11 @@ var namePool = []string{
 	"tanaka", "athena", "apollo", "hermes", "iris", "prometheus",
 }
 
-type SleeveInfo struct {
-	Name         string    `json:"name"`
-	ContainerID  string    `json:"container_id"`
-	Workspace    string    `json:"workspace"`
-	TTYDPort     int       `json:"ttyd_port"`
-	TTYDAddress  string    `json:"ttyd_address"`
-	SpawnTime    time.Time `json:"spawn_time"`
-	Status       string    `json:"status"`
-}
-
-type SpawnSleeveRequest struct {
-	Workspace string `json:"workspace"`
-	Name      string `json:"name,omitempty"`
-}
-
 type SleeveManager struct {
 	mu       sync.RWMutex
 	docker   *DockerClient
 	cfg      *config.EnvoyConfig
-	sleeves  map[string]*SleeveInfo
+	sleeves  map[string]*protocol.SleeveInfo
 	usedNames map[string]bool
 	nextPort int
 }
@@ -47,7 +36,7 @@ func NewSleeveManager(docker *DockerClient, cfg *config.EnvoyConfig) *SleeveMana
 	return &SleeveManager{
 		docker:    docker,
 		cfg:       cfg,
-		sleeves:   make(map[string]*SleeveInfo),
+		sleeves:   make(map[string]*protocol.SleeveInfo),
 		usedNames: make(map[string]bool),
 		nextPort:  7681,
 	}
@@ -92,7 +81,48 @@ func (m *SleeveManager) toHostPath(containerPath string) string {
 	return containerPath
 }
 
-func (m *SleeveManager) Spawn(req SpawnSleeveRequest) (*SleeveInfo, error) {
+func repoNameFromURL(url string) string {
+	url = strings.TrimSuffix(url, ".git")
+	url = strings.TrimSuffix(url, "/")
+	parts := strings.Split(url, "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return ""
+}
+
+func cloneRepo(url, destPath string) error {
+	cmd := exec.Command("git", "clone", url, destPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.SleeveInfo, error) {
+	workspace := req.Workspace
+
+	if req.RepoURL != "" {
+		if workspace == "" {
+			repoName := repoNameFromURL(req.RepoURL)
+			if repoName == "" {
+				return nil, fmt.Errorf("could not derive workspace name from repo URL")
+			}
+			workspace = filepath.Join(m.cfg.Docker.WorkspaceRoot, repoName)
+		}
+
+		if _, err := os.Stat(workspace); err == nil {
+			return nil, fmt.Errorf("workspace %q already exists", workspace)
+		}
+
+		if err := cloneRepo(req.RepoURL, workspace); err != nil {
+			return nil, fmt.Errorf("failed to clone repo: %w", err)
+		}
+	}
+
+	if workspace == "" {
+		return nil, fmt.Errorf("workspace path required")
+	}
+
 	name := req.Name
 	if name == "" {
 		name = m.allocateName()
@@ -122,11 +152,11 @@ func (m *SleeveManager) Spawn(req SpawnSleeveRequest) (*SleeveInfo, error) {
 		Labels: map[string]string{
 			"protectorate.sleeve":    "true",
 			"protectorate.name":      name,
-			"protectorate.workspace": req.Workspace,
+			"protectorate.workspace": workspace,
 		},
 	}
 
-	workspaceHostPath := m.toHostPath(req.Workspace)
+	workspaceHostPath := m.toHostPath(workspace)
 
 	mounts := []mount.Mount{
 		{
@@ -186,10 +216,10 @@ func (m *SleeveManager) Spawn(req SpawnSleeveRequest) (*SleeveInfo, error) {
 		return nil, fmt.Errorf("failed to start container: %w", err)
 	}
 
-	sleeve := &SleeveInfo{
+	sleeve := &protocol.SleeveInfo{
 		Name:        name,
 		ContainerID: containerID[:12],
-		Workspace:   req.Workspace,
+		Workspace:   workspace,
 		TTYDPort:    port,
 		TTYDAddress: fmt.Sprintf("%s:7681", containerName),
 		SpawnTime:   time.Now(),
@@ -237,18 +267,18 @@ func (m *SleeveManager) Kill(name string) error {
 	return nil
 }
 
-func (m *SleeveManager) List() []*SleeveInfo {
+func (m *SleeveManager) List() []*protocol.SleeveInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	result := make([]*SleeveInfo, 0, len(m.sleeves))
+	result := make([]*protocol.SleeveInfo, 0, len(m.sleeves))
 	for _, s := range m.sleeves {
 		result = append(result, s)
 	}
 	return result
 }
 
-func (m *SleeveManager) Get(name string) (*SleeveInfo, error) {
+func (m *SleeveManager) Get(name string) (*protocol.SleeveInfo, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -292,7 +322,7 @@ func (m *SleeveManager) RecoverSleeves() error {
 			status = c.State
 		}
 
-		sleeve := &SleeveInfo{
+		sleeve := &protocol.SleeveInfo{
 			Name:        name,
 			ContainerID: c.ID[:12],
 			Workspace:   workspace,
