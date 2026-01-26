@@ -583,20 +583,36 @@ func (wm *WorkspaceManager) CommitAll(wsPath, message string) (*protocol.FetchRe
 		}, nil
 	}
 
-	// Build commit command - use env vars if set, otherwise rely on mounted ~/.gitconfig
-	args := []string{"-c", "safe.directory=" + wsPath, "-C", wsPath}
-
+	// Get git identity - check env vars, then try to read from host gitconfig
 	gitName := os.Getenv("GIT_COMMITTER_NAME")
 	gitEmail := os.Getenv("GIT_COMMITTER_EMAIL")
-	if gitName != "" {
-		args = append(args, "-c", "user.name="+gitName)
-	}
-	if gitEmail != "" {
-		args = append(args, "-c", "user.email="+gitEmail)
-	}
-	args = append(args, "commit", "-m", message)
 
-	cmd := exec.Command("git", args...)
+	// Try to read from mounted gitconfig if env vars not set
+	if gitName == "" || gitEmail == "" {
+		if name, _ := exec.Command("git", "config", "--global", "user.name").Output(); len(name) > 0 {
+			gitName = strings.TrimSpace(string(name))
+		}
+		if email, _ := exec.Command("git", "config", "--global", "user.email").Output(); len(email) > 0 {
+			gitEmail = strings.TrimSpace(string(email))
+		}
+	}
+
+	// Fall back to defaults if still empty
+	if gitName == "" {
+		gitName = "Protectorate Envoy"
+	}
+	if gitEmail == "" {
+		gitEmail = "envoy@protectorate.local"
+	}
+
+	// Commit using env vars (more reliable than -c flags)
+	cmd := exec.Command("git", "-c", "safe.directory="+wsPath, "-C", wsPath, "commit", "-m", message)
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME="+gitName,
+		"GIT_AUTHOR_EMAIL="+gitEmail,
+		"GIT_COMMITTER_NAME="+gitName,
+		"GIT_COMMITTER_EMAIL="+gitEmail,
+	)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return &protocol.FetchResult{
 			Success: false,
