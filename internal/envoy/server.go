@@ -24,6 +24,10 @@ func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
 
 	sleeves := NewSleeveManager(docker, cfg)
 
+	if err := sleeves.RecoverSleeves(); err != nil {
+		return nil, fmt.Errorf("failed to recover sleeves: %w", err)
+	}
+
 	s := &Server{
 		cfg:     cfg,
 		docker:  docker,

@@ -170,3 +170,17 @@ func (d *DockerClient) EnsureNetwork(name string) error {
 	_, err = d.cli.NetworkCreate(ctx, name, network.CreateOptions{Driver: "bridge"})
 	return err
 }
+
+func (d *DockerClient) ListSleeveContainers() ([]types.Container, error) {
+	ctx := context.Background()
+
+	f := filters.NewArgs()
+	f.Add("label", "protectorate.sleeve=true")
+
+	return d.cli.ContainerList(ctx, container.ListOptions{All: true, Filters: f})
+}
+
+func (d *DockerClient) InspectContainer(id string) (types.ContainerJSON, error) {
+	ctx := context.Background()
+	return d.cli.ContainerInspect(ctx, id)
+}

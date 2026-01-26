@@ -2,6 +2,7 @@ package envoy
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -117,6 +118,11 @@ func (m *SleeveManager) Spawn(req SpawnSleeveRequest) (*SleeveInfo, error) {
 		Image: m.cfg.Docker.SleeveImage,
 		ExposedPorts: nat.PortSet{
 			"7681/tcp": struct{}{},
+		},
+		Labels: map[string]string{
+			"protectorate.sleeve":    "true",
+			"protectorate.name":      name,
+			"protectorate.workspace": req.Workspace,
 		},
 	}
 
@@ -251,4 +257,59 @@ func (m *SleeveManager) Get(name string) (*SleeveInfo, error) {
 		return nil, fmt.Errorf("sleeve %q not found", name)
 	}
 	return sleeve, nil
+}
+
+func (m *SleeveManager) RecoverSleeves() error {
+	containers, err := m.docker.ListSleeveContainers()
+	if err != nil {
+		return fmt.Errorf("failed to list sleeve containers: %w", err)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	recovered := 0
+	for _, c := range containers {
+		name := c.Labels["protectorate.name"]
+		workspace := c.Labels["protectorate.workspace"]
+
+		if name == "" {
+			continue
+		}
+
+		if _, exists := m.sleeves[name]; exists {
+			continue
+		}
+
+		containerName := "sleeve-" + name
+
+		status := "unknown"
+		if c.State == "running" {
+			status = "running"
+		} else if c.State == "exited" {
+			status = "stopped"
+		} else {
+			status = c.State
+		}
+
+		sleeve := &SleeveInfo{
+			Name:        name,
+			ContainerID: c.ID[:12],
+			Workspace:   workspace,
+			TTYDPort:    7681,
+			TTYDAddress: fmt.Sprintf("%s:7681", containerName),
+			SpawnTime:   time.Unix(c.Created, 0),
+			Status:      status,
+		}
+
+		m.sleeves[name] = sleeve
+		m.usedNames[name] = true
+		recovered++
+	}
+
+	if recovered > 0 {
+		log.Printf("recovered %d existing sleeve(s) from Docker", recovered)
+	}
+
+	return nil
 }
