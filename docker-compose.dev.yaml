@@ -18,7 +18,6 @@ services:
     container_name: envoy-dev
     ports:
       - "7470:7470"
-      - "7681:7681"
     volumes:
       # Mount pre-built binary (rebuild with: make bin/envoy)
       - ./bin/envoy:/usr/local/bin/envoy:ro

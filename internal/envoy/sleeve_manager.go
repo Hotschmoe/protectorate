@@ -11,7 +11,6 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
-	"github.com/docker/go-connections/nat"
 	"github.com/hotschmoe/protectorate/internal/config"
 	"github.com/hotschmoe/protectorate/internal/protocol"
 )
@@ -22,12 +21,11 @@ var namePool = []string{
 }
 
 type SleeveManager struct {
-	mu       sync.RWMutex
-	docker   *DockerClient
-	cfg      *config.EnvoyConfig
-	sleeves  map[string]*protocol.SleeveInfo
+	mu        sync.RWMutex
+	docker    *DockerClient
+	cfg       *config.EnvoyConfig
+	sleeves   map[string]*protocol.SleeveInfo
 	usedNames map[string]bool
-	nextPort int
 }
 
 func NewSleeveManager(docker *DockerClient, cfg *config.EnvoyConfig) *SleeveManager {
@@ -36,7 +34,6 @@ func NewSleeveManager(docker *DockerClient, cfg *config.EnvoyConfig) *SleeveMana
 		cfg:       cfg,
 		sleeves:   make(map[string]*protocol.SleeveInfo),
 		usedNames: make(map[string]bool),
-		nextPort:  7681,
 	}
 }
 
@@ -60,14 +57,6 @@ func (m *SleeveManager) releaseName(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.usedNames, name)
-}
-
-func (m *SleeveManager) allocatePort() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	port := m.nextPort
-	m.nextPort++
-	return port
 }
 
 func (m *SleeveManager) toHostPath(containerPath string) string {
@@ -104,7 +93,6 @@ func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.Sleeve
 	}
 
 	containerName := "sleeve-" + name
-	port := m.allocatePort()
 
 	if err := m.docker.EnsureNetwork(m.cfg.Docker.Network); err != nil {
 		m.releaseName(name)
@@ -113,9 +101,6 @@ func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.Sleeve
 
 	cfg := &container.Config{
 		Image: m.cfg.Docker.SleeveImage,
-		ExposedPorts: nat.PortSet{
-			"7681/tcp": struct{}{},
-		},
 		Labels: map[string]string{
 			"protectorate.sleeve":    "true",
 			"protectorate.name":      name,
@@ -184,13 +169,12 @@ func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.Sleeve
 	}
 
 	sleeve := &protocol.SleeveInfo{
-		Name:        name,
-		ContainerID: containerID[:12],
-		Workspace:   workspace,
-		TTYDPort:    port,
-		TTYDAddress: fmt.Sprintf("%s:7681", containerName),
-		SpawnTime:   time.Now(),
-		Status:      "running",
+		Name:          name,
+		ContainerID:   containerID[:12],
+		ContainerName: containerName,
+		Workspace:     workspace,
+		SpawnTime:     time.Now(),
+		Status:        "running",
 	}
 
 	m.mu.Lock()
@@ -290,13 +274,12 @@ func (m *SleeveManager) RecoverSleeves() error {
 		}
 
 		sleeve := &protocol.SleeveInfo{
-			Name:        name,
-			ContainerID: c.ID[:12],
-			Workspace:   workspace,
-			TTYDPort:    7681,
-			TTYDAddress: fmt.Sprintf("%s:7681", containerName),
-			SpawnTime:   time.Unix(c.Created, 0),
-			Status:      status,
+			Name:          name,
+			ContainerID:   c.ID[:12],
+			ContainerName: containerName,
+			Workspace:     workspace,
+			SpawnTime:     time.Unix(c.Created, 0),
+			Status:        status,
 		}
 
 		m.sleeves[name] = sleeve

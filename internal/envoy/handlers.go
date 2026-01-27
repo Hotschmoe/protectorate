@@ -127,11 +127,33 @@ func (s *Server) handleSleeveTerminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.proxyWebSocket(w, r, sleeve.TTYDAddress)
+	readOnly := r.URL.Query().Get("mode") == "observe"
+	socketPath := "/home/claude/.abduco/claude.sock"
+
+	gateway := NewTerminalGateway(s.docker, sleeve.ContainerName, socketPath, readOnly)
+	gateway.Start(w, r)
 }
 
 func (s *Server) handleEnvoyTerminal(w http.ResponseWriter, r *http.Request) {
-	s.proxyWebSocket(w, r, "localhost:7681")
+	readOnly := r.URL.Query().Get("mode") == "observe"
+	socketPath := "/home/claude/.abduco/envoy.sock"
+
+	envoyContainer, err := s.docker.GetContainerByName("envoy-dev")
+	if err != nil || envoyContainer == nil {
+		envoyContainer, err = s.docker.GetContainerByName("envoy")
+	}
+	if err != nil || envoyContainer == nil {
+		http.Error(w, "envoy container not found", http.StatusNotFound)
+		return
+	}
+
+	containerName := envoyContainer.Names[0]
+	if len(containerName) > 0 && containerName[0] == '/' {
+		containerName = containerName[1:]
+	}
+
+	gateway := NewTerminalGateway(s.docker, containerName, socketPath, readOnly)
+	gateway.Start(w, r)
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {

@@ -279,6 +279,20 @@
             color: #8b949e;
             margin-left: 0.5rem;
         }
+        .terminal-readonly-badge {
+            display: none;
+            background: rgba(210, 153, 34, 0.2);
+            color: #d29922;
+            font-size: 0.7rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            margin-left: 0.5rem;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        .terminal-readonly-badge.active {
+            display: inline-block;
+        }
         .error-text {
             color: #f85149;
             font-size: 0.875rem;
@@ -676,6 +690,7 @@
             <div class="terminal-header">
                 <div style="display: flex; align-items: center;">
                     <span id="terminal-title">Terminal</span>
+                    <span id="terminal-readonly-badge" class="terminal-readonly-badge">Read-Only</span>
                     <span id="terminal-status" class="terminal-status"></span>
                     <span id="reconnect-info" class="reconnect-info"></span>
                 </div>
@@ -694,10 +709,10 @@
         let lastFetchAllTime = 0;
         const FETCH_ALL_THROTTLE_MS = 60000;
 
-        const TTYD_INPUT = 48;
-        const TTYD_RESIZE = 49;
+        const MSG_DATA = 0x30;   // '0' - input/output data
+        const MSG_RESIZE = 0x31; // '1' - resize command
 
-        function buildTtydMessage(type, data) {
+        function buildTerminalMessage(type, data) {
             const msg = new Uint8Array(data.length + 1);
             msg[0] = type;
             for (let i = 0; i < data.length; i++) {
@@ -797,10 +812,11 @@
         }
 
         class TerminalConnection {
-            constructor(container, wsPath, title) {
+            constructor(container, wsPath, title, readOnly = false) {
                 this.wsPath = wsPath;
                 this.title = title;
                 this.container = container;
+                this.readOnly = readOnly;
                 this.term = null;
                 this.ws = null;
                 this.fitAddon = null;
@@ -827,11 +843,13 @@
                 this.term.open(this.container);
                 this.fitAddon.fit();
 
-                this.term.onData((data) => {
-                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                        this.ws.send(buildTtydMessage(TTYD_INPUT, data));
-                    }
-                });
+                if (!this.readOnly) {
+                    this.term.onData((data) => {
+                        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                            this.ws.send(buildTerminalMessage(MSG_DATA, data));
+                        }
+                    });
+                }
 
                 this.resizeHandler = () => {
                     this.fitAddon.fit();
@@ -846,7 +864,7 @@
                 }
 
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                this.ws = new WebSocket(`${protocol}//${window.location.host}${this.wsPath}`, ['tty']);
+                this.ws = new WebSocket(`${protocol}//${window.location.host}${this.wsPath}`);
                 this.ws.binaryType = 'arraybuffer';
 
                 this.updateStatus('connecting');
@@ -855,8 +873,7 @@
                     this.reconnectAttempts = 0;
                     this.updateStatus('connected');
                     const initData = JSON.stringify({
-                        AuthToken: "",
-                        columns: this.term.cols,
+                        cols: this.term.cols,
                         rows: this.term.rows
                     });
                     this.ws.send(initData);
@@ -864,7 +881,7 @@
 
                 this.ws.onmessage = (event) => {
                     const data = new Uint8Array(event.data);
-                    if (data.length > 0 && data[0] === TTYD_INPUT) {
+                    if (data.length > 0 && data[0] === MSG_DATA) {
                         this.term.write(data.slice(1));
                     }
                 };
@@ -921,7 +938,7 @@
                 this.resizeTimeout = setTimeout(() => {
                     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                         const json = JSON.stringify({columns: this.term.cols, rows: this.term.rows});
-                        this.ws.send(buildTtydMessage(TTYD_RESIZE, json));
+                        this.ws.send(buildTerminalMessage(MSG_RESIZE, json));
                     }
                 }, 100);
             }
@@ -1033,6 +1050,7 @@
                         </div>
                         <div class="sleeve-actions">
                             <button class="btn btn-secondary" onclick="openTerminal('${s.name}')">Terminal</button>
+                            <button class="btn btn-secondary" onclick="openTerminalObserve('${s.name}')">Observe</button>
                             <button class="btn btn-danger" onclick="killSleeve('${s.name}')">Kill</button>
                         </div>
                     </div>
@@ -1789,10 +1807,17 @@
             }
         }
 
-        function openTerminalWithPath(title, wsPath) {
+        function openTerminalWithPath(title, wsPath, readOnly = false) {
             document.getElementById('terminal-title').textContent = title;
             document.getElementById('terminal-modal').classList.add('active');
             document.getElementById('reconnect-info').textContent = '';
+
+            const readOnlyBadge = document.getElementById('terminal-readonly-badge');
+            if (readOnly) {
+                readOnlyBadge.classList.add('active');
+            } else {
+                readOnlyBadge.classList.remove('active');
+            }
 
             const container = document.getElementById('terminal-container');
 
@@ -1800,12 +1825,16 @@
                 currentConnection.dispose();
             }
 
-            currentConnection = new TerminalConnection(container, wsPath, title);
+            currentConnection = new TerminalConnection(container, wsPath, title, readOnly);
             currentConnection.connect();
         }
 
         function openTerminal(name) {
             openTerminalWithPath(`Terminal - ${name}`, `/sleeves/${name}/terminal`);
+        }
+
+        function openTerminalObserve(name) {
+            openTerminalWithPath(`Terminal - ${name} (Observe)`, `/sleeves/${name}/terminal?mode=observe`, true);
         }
 
         function openEnvoyTerminal() {

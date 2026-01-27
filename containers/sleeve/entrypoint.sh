@@ -1,42 +1,27 @@
 #!/bin/bash
 set -e
 
-TMUX_SESSION="main"
-
-# Fix ownership of mounted volumes (runs as root)
 chown -R claude:claude /home/claude/workspace
 chown -R claude:claude /home/claude/.claude 2>/dev/null || true
 
-# Copy read-only mounted settings to writable location
 if [ -f /etc/claude/settings.json ]; then
-    cp /etc/claude/settings.json /home/claude/.claude.json
-    chown claude:claude /home/claude/.claude.json
+    cp /etc/claude/settings.json /home/claude/.claude/settings.json
+    chown claude:claude /home/claude/.claude/settings.json
 fi
 
-# Create tmux session manager script that respawns on exit
-cat > /usr/local/bin/tmux-session.sh << 'SCRIPT'
+SOCKET_DIR="/home/claude/.abduco"
+SOCKET_PATH="${SOCKET_DIR}/claude.sock"
+
+mkdir -p "$SOCKET_DIR"
+chown claude:claude "$SOCKET_DIR"
+
+cat > /usr/local/bin/claude-session.sh << 'SCRIPT'
 #!/bin/bash
-SESSION="main"
-FIRST_RUN=true
-while true; do
-    if ! su - claude -c "tmux has-session -t $SESSION 2>/dev/null"; then
-        su - claude -c "tmux new-session -d -s $SESSION"
-        if [ "$FIRST_RUN" = true ]; then
-            su - claude -c "tmux send-keys -t $SESSION 'cd /home/claude/workspace && claude --dangerously-skip-permissions' Enter"
-            FIRST_RUN=false
-        fi
-    fi
-    su - claude -c "tmux attach-session -t $SESSION"
-    sleep 0.5
-done
+cd /home/claude/workspace
+exec claude --dangerously-skip-permissions
 SCRIPT
-chmod +x /usr/local/bin/tmux-session.sh
+chmod +x /usr/local/bin/claude-session.sh
 
-# Start initial tmux session with Claude
-su - claude -c "tmux new-session -d -s $TMUX_SESSION"
-su - claude -c "tmux send-keys -t $TMUX_SESSION 'cd /home/claude/workspace && claude --dangerously-skip-permissions' Enter"
+su - claude -c "abduco -e '^]' -c $SOCKET_PATH /usr/local/bin/claude-session.sh" &
 
-exec ttyd \
-    --port 7681 \
-    --writable \
-    /usr/local/bin/tmux-session.sh
+exec sleep infinity

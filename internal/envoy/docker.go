@@ -184,3 +184,69 @@ func (d *DockerClient) InspectContainer(id string) (types.ContainerJSON, error) 
 	ctx := context.Background()
 	return d.cli.ContainerInspect(ctx, id)
 }
+
+// ExecAttachOptions configures a Docker exec session
+type ExecAttachOptions struct {
+	Container string
+	Cmd       []string
+	Env       []string
+	User      string
+	Cols      uint
+	Rows      uint
+}
+
+// ExecSession represents an active exec session
+type ExecSession struct {
+	ID   string
+	Conn types.HijackedResponse
+}
+
+// ExecAttach creates and attaches to an exec session in a container
+func (d *DockerClient) ExecAttach(ctx context.Context, opts ExecAttachOptions) (*ExecSession, error) {
+	execConfig := container.ExecOptions{
+		Cmd:          opts.Cmd,
+		Env:          opts.Env,
+		User:         opts.User,
+		Tty:          true,
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	resp, err := d.cli.ContainerExecCreate(ctx, opts.Container, execConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create exec: %w", err)
+	}
+
+	attachResp, err := d.cli.ContainerExecAttach(ctx, resp.ID, container.ExecStartOptions{
+		Tty: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to attach exec: %w", err)
+	}
+
+	if opts.Cols > 0 && opts.Rows > 0 {
+		_ = d.cli.ContainerExecResize(ctx, resp.ID, container.ResizeOptions{
+			Width:  opts.Cols,
+			Height: opts.Rows,
+		})
+	}
+
+	return &ExecSession{
+		ID:   resp.ID,
+		Conn: attachResp,
+	}, nil
+}
+
+// ExecResize resizes the TTY of an exec session
+func (d *DockerClient) ExecResize(ctx context.Context, execID string, cols, rows uint) error {
+	return d.cli.ContainerExecResize(ctx, execID, container.ResizeOptions{
+		Width:  cols,
+		Height: rows,
+	})
+}
+
+// ExecInspect returns information about an exec session
+func (d *DockerClient) ExecInspect(ctx context.Context, execID string) (container.ExecInspect, error) {
+	return d.cli.ContainerExecInspect(ctx, execID)
+}
