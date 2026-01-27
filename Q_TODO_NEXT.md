@@ -1,6 +1,4 @@
-# TODO: Next Session Topics
-
-## 1. CLI vs WebAPI + jq / Envoy Container vs Native Binary
+# TODO: CLI vs WebAPI / Envoy Container vs Native Binary
 
 ### Current State
 - Envoy runs inside a Docker container
@@ -36,12 +34,3 @@ Arguments for containerized envoy:
 
 ### Decision Needed
 This affects architecture significantly. Worth dedicated discussion.
-
----
-
-## 2. Consolidate .env.example and Install Script [DONE]
-
-Implemented Option A:
-- `.env.example` now uses `${HOME}/protectorate/workspaces`
-- `install.sh` downloads `.env.example` directly instead of generating inline
-- Single source of truth for all configuration defaults
