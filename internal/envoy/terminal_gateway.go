@@ -137,6 +137,7 @@ func (g *TerminalGateway) startExecSession() error {
 		Container: g.container,
 		Cmd:       cmd,
 		User:      "claude",
+		Env:       []string{"TERM=xterm-256color"},
 		Cols:      g.initialCols,
 		Rows:      g.initialRows,
 	})
