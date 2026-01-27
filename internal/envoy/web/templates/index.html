@@ -3,389 +3,499 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Protectorate Envoy</title>
+    <title>Protectorate // Envoy</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Orbitron:wght@600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
     <style>
+        :root {
+            /* Background Layers */
+            --bg-deep: #0a0a0f;
+            --bg-surface: #12121a;
+            --bg-elevated: #1a1a24;
+            --bg-overlay: rgba(10, 10, 15, 0.8);
+
+            /* Cyan family - "stack active" */
+            --cyan-glow: #00f5ff;
+            --cyan-dim: #00a5aa;
+            --cyan-subtle: #004d4f;
+
+            /* Amber family - "attention" */
+            --amber-glow: #ffaa00;
+            --amber-dim: #aa7700;
+
+            /* Magenta family - "critical/error" */
+            --magenta-glow: #ff0055;
+            --magenta-dim: #aa0038;
+
+            /* Text */
+            --text-primary: #e0e0e0;
+            --text-secondary: #808090;
+            --text-muted: #505060;
+
+            /* Typography */
+            --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+            --font-display: 'Orbitron', 'Rajdhani', sans-serif;
+
+            /* Sizes */
+            --text-xs: 0.75rem;
+            --text-sm: 0.875rem;
+            --text-base: 1rem;
+            --text-lg: 1.25rem;
+            --text-xl: 1.5rem;
+            --text-2xl: 2rem;
+        }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-            background: #0d1117;
-            color: #c9d1d9;
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            font-size: var(--text-base);
+            line-height: 1.6;
             min-height: 100vh;
         }
-        .header {
-            background: #161b22;
-            border-bottom: 1px solid #30363d;
-            padding: 1rem 2rem;
+
+        /* Scanlines overlay */
+        .scanlines {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 0, 0, 0.03) 2px,
+                rgba(0, 0, 0, 0.03) 4px
+            );
+            z-index: 1000;
+        }
+
+        /* Top Navigation */
+        .top-nav {
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--cyan-subtle);
+            padding: 0 1.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            height: 60px;
         }
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: #58a6ff;
+
+        .brand {
+            font-family: var(--font-display);
+            font-size: var(--text-lg);
+            font-weight: 700;
+            color: var(--cyan-glow);
+            text-shadow: 0 0 10px var(--cyan-subtle);
         }
-        .auth-status {
+
+        .brand span {
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
+        .nav-right {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 1rem;
         }
-        .auth-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #f85149;
+
+        .cluster-badge {
+            background: var(--bg-elevated);
+            border: 1px solid var(--cyan-subtle);
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: var(--text-sm);
+            color: var(--text-secondary);
         }
-        .auth-indicator.authenticated { background: #3fb950; }
-        .tabs {
-            background: #161b22;
-            border-bottom: 1px solid #30363d;
-            padding: 0 2rem;
+
+        .admin-badge {
+            background: var(--cyan-subtle);
+            color: var(--cyan-glow);
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: var(--text-sm);
+            font-weight: 600;
+        }
+
+        .admin-badge.authenticated {
+            background: rgba(0, 245, 255, 0.2);
+        }
+
+        .admin-badge.unauthenticated {
+            background: rgba(255, 0, 85, 0.2);
+            color: var(--magenta-glow);
+        }
+
+        /* Tab Navigation */
+        .tab-nav {
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--cyan-subtle);
             display: flex;
-            gap: 0;
+            padding: 0 1.5rem;
         }
+
         .tab {
-            padding: 0.75rem 1.5rem;
-            color: #8b949e;
+            padding: 1rem 1.5rem;
+            color: var(--text-secondary);
             cursor: pointer;
             border-bottom: 2px solid transparent;
-            transition: all 0.15s;
+            transition: all 0.2s;
+            font-size: var(--text-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
-        .tab:hover { color: #c9d1d9; }
+
+        .tab:hover {
+            color: var(--text-primary);
+            background: var(--bg-elevated);
+        }
+
         .tab.active {
-            color: #c9d1d9;
-            border-bottom-color: #f78166;
+            color: var(--cyan-glow);
+            border-bottom-color: var(--cyan-glow);
         }
+
         .tab-content { display: none; }
         .tab-content.active { display: block; }
-        .main {
-            padding: 2rem;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
+
+        /* Main Content */
+        .main-content {
+            padding: 1.5rem;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .dashboard-title {
+            font-family: var(--font-display);
+            font-size: var(--text-xl);
+            color: var(--text-primary);
+        }
+
+        .dashboard-stats {
+            display: flex;
             gap: 2rem;
+            align-items: center;
         }
-        .panel {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 6px;
+
+        .stat {
+            text-align: center;
         }
-        .panel-header {
-            padding: 1rem;
-            border-bottom: 1px solid #30363d;
+
+        .stat-value {
+            font-size: var(--text-2xl);
+            font-weight: 700;
+            color: var(--cyan-glow);
+        }
+
+        .stat-value.warning { color: var(--amber-glow); }
+        .stat-value.critical { color: var(--magenta-glow); }
+
+        .stat-label {
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--cyan-subtle);
+            background: transparent;
+            color: var(--text-secondary);
+            font-family: var(--font-mono);
+            font-size: var(--text-sm);
+            cursor: pointer;
+            transition: all 0.2s;
+            border-radius: 4px;
+        }
+
+        .btn:hover {
+            background: var(--cyan-subtle);
+            color: var(--cyan-glow);
+            border-color: var(--cyan-dim);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: var(--cyan-subtle);
+            color: var(--cyan-glow);
+            border-color: var(--cyan-dim);
+        }
+
+        .btn-primary:hover {
+            background: var(--cyan-dim);
+            box-shadow: 0 0 10px var(--cyan-subtle);
+        }
+
+        .btn-danger {
+            border-color: var(--magenta-dim);
+            color: var(--magenta-glow);
+        }
+
+        .btn-danger:hover {
+            background: var(--magenta-dim);
+            border-color: var(--magenta-glow);
+        }
+
+        .btn-small {
+            padding: 0.25rem 0.5rem;
+            font-size: var(--text-xs);
+        }
+
+        /* Sleeve Grid */
+        .sleeve-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+            gap: 1.5rem;
+        }
+
+        /* Sleeve Card */
+        .sleeve-card {
+            background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-elevated) 100%);
+            border: 1px solid var(--cyan-subtle);
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .sleeve-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--cyan-glow);
+        }
+
+        .sleeve-card.healthy {
+            box-shadow: 0 0 20px rgba(0, 245, 255, 0.1);
+        }
+
+        .sleeve-card.healthy::before {
+            background: var(--cyan-glow);
+            box-shadow: 0 0 10px var(--cyan-glow);
+        }
+
+        .sleeve-card.warning::before {
+            background: var(--amber-glow);
+            box-shadow: 0 0 10px var(--amber-glow);
+        }
+
+        .sleeve-card.critical {
+            animation: pulse-critical 2s ease-in-out infinite;
+        }
+
+        .sleeve-card.critical::before {
+            background: var(--magenta-glow);
+            box-shadow: 0 0 10px var(--magenta-glow);
+        }
+
+        @keyframes pulse-critical {
+            0%, 100% { box-shadow: 0 0 20px rgba(255, 0, 85, 0.2); }
+            50% { box-shadow: 0 0 30px rgba(255, 0, 85, 0.4); }
+        }
+
+        .sleeve-header {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--cyan-subtle);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
-        .panel-title { font-weight: 600; }
-        .panel-body { padding: 1rem; }
-        .btn {
-            background: #238636;
-            color: #fff;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.875rem;
+
+        .sleeve-name {
+            font-family: var(--font-display);
+            font-size: var(--text-lg);
+            font-weight: 600;
+            color: var(--cyan-glow);
         }
-        .btn:hover { background: #2ea043; }
-        .btn:disabled {
-            background: #21262d;
-            color: #6e7681;
-            cursor: not-allowed;
+
+        .sleeve-status {
+            font-size: var(--text-xs);
+            text-transform: uppercase;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-weight: 600;
         }
-        .btn-danger { background: #da3633; }
-        .btn-danger:hover { background: #f85149; }
-        .btn-secondary {
-            background: #21262d;
-            border: 1px solid #30363d;
+
+        .sleeve-status.active {
+            background: rgba(0, 245, 255, 0.2);
+            color: var(--cyan-glow);
         }
-        .btn-secondary:hover { background: #30363d; }
+
+        .sleeve-status.idle {
+            background: rgba(128, 128, 144, 0.2);
+            color: var(--text-secondary);
+        }
+
+        .sleeve-body {
+            padding: 1.25rem;
+        }
+
+        .sleeve-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+        }
+
+        .sleeve-label {
+            color: var(--text-muted);
+            font-size: var(--text-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .sleeve-value {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .sleeve-actions {
+            padding: 1rem 1.25rem;
+            border-top: 1px solid var(--cyan-subtle);
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .sleeve-actions .btn {
+            flex: 1;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: var(--text-secondary);
+            border: 1px dashed var(--cyan-subtle);
+            border-radius: 8px;
+            background: var(--bg-surface);
+        }
+
+        /* Panel (for workspaces, doctor, etc) */
+        .panel {
+            background: var(--bg-surface);
+            border: 1px solid var(--cyan-subtle);
+            border-radius: 8px;
+        }
+
+        .panel-header {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--cyan-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-title {
+            font-family: var(--font-display);
+            font-size: var(--text-lg);
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .panel-body { padding: 1.25rem; }
+
+        /* Tables */
         table {
             width: 100%;
             border-collapse: collapse;
         }
+
         th, td {
             text-align: left;
             padding: 0.75rem;
-            border-bottom: 1px solid #21262d;
+            border-bottom: 1px solid var(--cyan-subtle);
         }
-        th { color: #8b949e; font-weight: 500; }
-        .status-running { color: #3fb950; }
-        .status-exited { color: #8b949e; }
-        .status-available { color: #3fb950; }
-        .status-in-use { color: #d29922; }
-        .status-cloning { color: #58a6ff; }
-        .sleeves-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 1rem;
-        }
-        .sleeve-card {
-            background: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            padding: 1rem;
-        }
-        .sleeve-name {
-            font-weight: 600;
-            font-size: 1.1rem;
-            margin-bottom: 0.5rem;
-            color: #58a6ff;
-        }
-        .sleeve-meta {
-            font-size: 0.875rem;
-            color: #8b949e;
-            margin-bottom: 1rem;
-        }
-        .sleeve-actions {
-            display: flex;
-            gap: 0.5rem;
-        }
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.7);
-            justify-content: center;
-            align-items: center;
-        }
-        .modal.active { display: flex; }
-        .modal-content {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            padding: 2rem;
-            width: 400px;
-            position: relative;
-        }
-        .modal-title {
-            font-size: 1.25rem;
-            margin-bottom: 1rem;
-        }
-        .form-group { margin-bottom: 1rem; }
-        .form-label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: #8b949e;
-        }
-        .form-input {
-            width: 100%;
-            padding: 0.5rem;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            color: #c9d1d9;
-        }
-        .form-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 0.5rem;
-        }
-        .terminal-modal {
-            width: 80%;
-            height: 70%;
-            padding: 0;
-        }
-        .terminal-header {
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid #30363d;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .terminal-container {
-            height: calc(100% - 50px);
-            padding: 0.5rem;
-            background: #0d1117;
-            border-radius: 4px;
-        }
-        /* xterm.js customizations */
-        .terminal-container .xterm {
-            padding: 8px;
-        }
-        .terminal-container .xterm-viewport {
-            /* Styled scrollbar */
-            scrollbar-width: thin;
-            scrollbar-color: #484f58 #0d1117;
-        }
-        .terminal-container .xterm-viewport::-webkit-scrollbar {
-            width: 8px;
-        }
-        .terminal-container .xterm-viewport::-webkit-scrollbar-track {
-            background: #0d1117;
-        }
-        .terminal-container .xterm-viewport::-webkit-scrollbar-thumb {
-            background: #484f58;
-            border-radius: 4px;
-        }
-        .terminal-container .xterm-viewport::-webkit-scrollbar-thumb:hover {
-            background: #6e7681;
-        }
-        .terminal-container .xterm-screen {
-            /* Subtle text shadow for readability */
-            text-shadow: 0 0 1px rgba(0, 0, 0, 0.3);
-        }
-        .full-width { grid-column: 1 / -1; }
-        .empty-state {
-            text-align: center;
-            padding: 2rem;
-            color: #8b949e;
-        }
-        .spawn-loading {
-            display: none;
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(22, 27, 34, 0.95);
-            border-radius: 6px;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            gap: 1rem;
-        }
-        .spawn-loading.active { display: flex; }
-        .spinner {
-            width: 48px;
-            height: 48px;
-            border: 3px solid #30363d;
-            border-top-color: #58a6ff;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        .spawn-loading-text {
-            color: #8b949e;
-            font-size: 0.9rem;
-        }
-        .radio-group {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-        .radio-option {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            cursor: pointer;
-        }
-        .radio-option input { cursor: pointer; }
-        .form-select {
-            width: 100%;
-            padding: 0.5rem;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            color: #c9d1d9;
-        }
-        .form-select option { background: #0d1117; }
-        .form-select option:disabled { color: #6e7681; }
-        .hidden { display: none; }
-        .terminal-status {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            margin-left: 8px;
-            vertical-align: middle;
-            background: #8b949e;
-        }
-        .terminal-status.connected { background: #3fb950; }
-        .terminal-status.connecting { background: #d29922; animation: pulse 1s infinite; }
-        .terminal-status.disconnected { background: #f85149; }
-        .terminal-status.error { background: #f85149; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .reconnect-info {
-            font-size: 0.75rem;
-            color: #8b949e;
-            margin-left: 0.5rem;
-        }
-        .terminal-readonly-badge {
-            display: none;
-            background: rgba(210, 153, 34, 0.2);
-            color: #d29922;
-            font-size: 0.7rem;
-            padding: 0.15rem 0.4rem;
-            border-radius: 3px;
-            margin-left: 0.5rem;
+
+        th {
+            color: var(--text-muted);
+            font-weight: 500;
             text-transform: uppercase;
-            font-weight: 600;
+            font-size: var(--text-xs);
+            letter-spacing: 0.05em;
         }
-        .terminal-readonly-badge.active {
-            display: inline-block;
-        }
-        .error-text {
-            color: #f85149;
-            font-size: 0.875rem;
-            margin-top: 0.5rem;
-        }
-        .git-branch { color: #a371f7; font-family: monospace; }
-        .git-detached { color: #d29922; font-family: monospace; }
-        .git-no-repo { color: #6e7681; }
-        .git-clean { color: #3fb950; }
-        .git-dirty { color: #f85149; }
-        .git-ahead { color: #58a6ff; }
-        .git-behind { color: #d29922; }
-        .git-commit-hash { color: #8b949e; font-family: monospace; }
-        .git-commit-time { color: #6e7681; font-size: 0.85em; }
-        .btn-small {
-            padding: 0.25rem 0.5rem;
-            font-size: 0.75rem;
-            margin-right: 0.25rem;
-        }
-        .btn-small:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
+
+        td { color: var(--text-primary); }
+
+        /* Git status colors */
+        .git-branch { color: var(--cyan-glow); font-family: var(--font-mono); }
+        .git-detached { color: var(--amber-glow); font-family: var(--font-mono); }
+        .git-no-repo { color: var(--text-muted); }
+        .git-clean { color: var(--cyan-glow); }
+        .git-dirty { color: var(--magenta-glow); }
+        .git-ahead { color: var(--cyan-dim); }
+        .git-behind { color: var(--amber-glow); }
+        .git-commit-hash { color: var(--text-secondary); font-family: var(--font-mono); }
+        .git-commit-time { color: var(--text-muted); font-size: 0.85em; }
+
         .action-buttons {
             display: flex;
             gap: 0.25rem;
+            flex-wrap: wrap;
         }
+
         .fetch-indicator {
-            color: #6e7681;
-            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-size: var(--text-sm);
             margin-right: 1rem;
             animation: blink 1s ease-in-out infinite;
         }
+
         @keyframes blink {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.4; }
         }
+
         .inline-spinner {
             display: inline-block;
             width: 12px;
             height: 12px;
-            border: 2px solid #30363d;
-            border-top-color: #58a6ff;
+            border: 2px solid var(--cyan-subtle);
+            border-top-color: var(--cyan-glow);
             border-radius: 50%;
             animation: spin 1s linear infinite;
             vertical-align: middle;
             margin-right: 6px;
         }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Doctor checks */
         .doctor-checks {
             display: flex;
             flex-direction: column;
             gap: 1rem;
         }
+
         .doctor-check {
             display: flex;
             align-items: flex-start;
             gap: 1rem;
             padding: 1rem;
-            background: #0d1117;
-            border: 1px solid #30363d;
+            background: var(--bg-elevated);
+            border: 1px solid var(--cyan-subtle);
             border-radius: 6px;
         }
+
         .doctor-check-icon {
             width: 24px;
             height: 24px;
@@ -396,141 +506,513 @@
             font-weight: bold;
             font-size: 14px;
         }
-        .doctor-check-icon.pass { color: #3fb950; }
-        .doctor-check-icon.warning { color: #d29922; }
-        .doctor-check-icon.fail { color: #f85149; }
-        .doctor-check-content {
-            flex: 1;
-        }
+
+        .doctor-check-icon.pass { color: var(--cyan-glow); }
+        .doctor-check-icon.warning { color: var(--amber-glow); }
+        .doctor-check-icon.fail { color: var(--magenta-glow); }
+
+        .doctor-check-content { flex: 1; }
+
         .doctor-check-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 0.25rem;
         }
+
         .doctor-check-name {
             font-weight: 600;
-            color: #c9d1d9;
+            color: var(--text-primary);
         }
+
         .doctor-check-status {
-            font-size: 0.75rem;
+            font-size: var(--text-xs);
             font-weight: 600;
             text-transform: uppercase;
             padding: 0.2rem 0.5rem;
             border-radius: 4px;
         }
+
         .doctor-check-status.pass {
-            background: rgba(63, 185, 80, 0.2);
-            color: #3fb950;
+            background: rgba(0, 245, 255, 0.2);
+            color: var(--cyan-glow);
         }
+
         .doctor-check-status.warning {
-            background: rgba(210, 153, 34, 0.2);
-            color: #d29922;
+            background: rgba(255, 170, 0, 0.2);
+            color: var(--amber-glow);
         }
+
         .doctor-check-status.fail {
-            background: rgba(248, 81, 73, 0.2);
-            color: #f85149;
+            background: rgba(255, 0, 85, 0.2);
+            color: var(--magenta-glow);
         }
+
         .doctor-check-message {
-            color: #8b949e;
-            font-size: 0.9rem;
+            color: var(--text-secondary);
+            font-size: var(--text-sm);
         }
+
         .doctor-check-suggestion {
             margin-top: 0.5rem;
             padding: 0.5rem;
-            background: #161b22;
-            border-left: 3px solid #58a6ff;
-            color: #8b949e;
-            font-size: 0.85rem;
+            background: var(--bg-deep);
+            border-left: 3px solid var(--cyan-dim);
+            color: var(--text-secondary);
+            font-size: var(--text-sm);
         }
+
         .doctor-check-suggestion code {
-            background: #0d1117;
+            background: var(--bg-elevated);
             padding: 0.1rem 0.3rem;
             border-radius: 3px;
-            font-family: monospace;
+            font-family: var(--font-mono);
+        }
+
+        /* Modals */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-overlay);
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+        }
+
+        .modal.active { display: flex; }
+
+        .modal-content {
+            background: var(--bg-surface);
+            border: 1px solid var(--cyan-subtle);
+            border-radius: 8px;
+            padding: 2rem;
+            width: 400px;
+            position: relative;
+            box-shadow: 0 0 30px rgba(0, 245, 255, 0.1);
+        }
+
+        .modal-title {
+            font-family: var(--font-display);
+            font-size: var(--text-lg);
+            color: var(--cyan-glow);
+            margin-bottom: 1rem;
+        }
+
+        .form-group { margin-bottom: 1rem; }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+            font-size: var(--text-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.5rem;
+            background: var(--bg-deep);
+            border: 1px solid var(--cyan-subtle);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--cyan-dim);
+            box-shadow: 0 0 5px var(--cyan-subtle);
+        }
+
+        .form-select {
+            width: 100%;
+            padding: 0.5rem;
+            background: var(--bg-deep);
+            border: 1px solid var(--cyan-subtle);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+        }
+
+        .form-select option { background: var(--bg-deep); }
+
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .radio-group {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+
+        .radio-option input { cursor: pointer; }
+
+        .hidden { display: none; }
+
+        .error-text {
+            color: var(--magenta-glow);
+            font-size: var(--text-sm);
+            margin-top: 0.5rem;
+        }
+
+        /* Spawn loading overlay */
+        .spawn-loading {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(18, 18, 26, 0.95);
+            border-radius: 8px;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .spawn-loading.active { display: flex; }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 3px solid var(--cyan-subtle);
+            border-top-color: var(--cyan-glow);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .spawn-loading-text {
+            color: var(--text-secondary);
+            font-size: var(--text-sm);
+        }
+
+        /* Terminal modal */
+        .terminal-modal {
+            width: 80%;
+            height: 70%;
+            padding: 0;
+        }
+
+        .terminal-header {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--cyan-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-surface);
+        }
+
+        .terminal-container {
+            height: calc(100% - 50px);
+            padding: 0.5rem;
+            background: var(--bg-deep);
+            border-radius: 0 0 8px 8px;
+        }
+
+        .terminal-container .xterm { padding: 8px; }
+
+        .terminal-container .xterm-viewport {
+            scrollbar-width: thin;
+            scrollbar-color: var(--cyan-subtle) var(--bg-deep);
+        }
+
+        .terminal-container .xterm-viewport::-webkit-scrollbar { width: 8px; }
+        .terminal-container .xterm-viewport::-webkit-scrollbar-track { background: var(--bg-deep); }
+        .terminal-container .xterm-viewport::-webkit-scrollbar-thumb {
+            background: var(--cyan-subtle);
+            border-radius: 4px;
+        }
+        .terminal-container .xterm-viewport::-webkit-scrollbar-thumb:hover {
+            background: var(--cyan-dim);
+        }
+
+        .terminal-status {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-left: 8px;
+            vertical-align: middle;
+            background: var(--text-muted);
+        }
+
+        .terminal-status.connected { background: var(--cyan-glow); }
+        .terminal-status.connecting { background: var(--amber-glow); animation: blink 1s infinite; }
+        .terminal-status.disconnected { background: var(--magenta-glow); }
+        .terminal-status.error { background: var(--magenta-glow); }
+
+        .reconnect-info {
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+            margin-left: 0.5rem;
+        }
+
+        .terminal-readonly-badge {
+            display: none;
+            background: rgba(255, 170, 0, 0.2);
+            color: var(--amber-glow);
+            font-size: var(--text-xs);
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            margin-left: 0.5rem;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .terminal-readonly-badge.active { display: inline-block; }
+
+        /* Placeholder content for new tabs */
+        .placeholder-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+            text-align: center;
+            color: var(--text-muted);
+        }
+
+        .placeholder-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .placeholder-title {
+            font-family: var(--font-display);
+            font-size: var(--text-xl);
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .placeholder-desc {
+            font-size: var(--text-sm);
+            max-width: 400px;
+        }
+
+        /* Needlecast 3-column layout (placeholder structure) */
+        .needlecast-layout {
+            display: grid;
+            grid-template-columns: 200px 1fr 250px;
+            gap: 1rem;
+            min-height: 500px;
+        }
+
+        .needlecast-sidebar {
+            background: var(--bg-surface);
+            border: 1px solid var(--cyan-subtle);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .needlecast-sidebar-title {
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 1rem;
+        }
+
+        .needlecast-sleeve-item {
+            padding: 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+        }
+
+        .needlecast-sleeve-item:hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+
+        .needlecast-sleeve-item.active {
+            background: var(--cyan-subtle);
+            color: var(--cyan-glow);
+        }
+
+        .needlecast-main {
+            background: var(--bg-surface);
+            border: 1px solid var(--cyan-subtle);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .needlecast-messages {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+        }
+
+        .needlecast-input {
+            border-top: 1px solid var(--cyan-subtle);
+            padding: 1rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .needlecast-input input {
+            flex: 1;
+            padding: 0.5rem;
+            background: var(--bg-deep);
+            border: 1px solid var(--cyan-subtle);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+        }
+
+        .needlecast-thread {
+            background: var(--bg-surface);
+            border: 1px solid var(--cyan-subtle);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .needlecast-thread-title {
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 1rem;
         }
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="logo">Protectorate Envoy</div>
-        <div style="display: flex; align-items: center; gap: 1rem;">
-            <button class="btn btn-secondary" onclick="openEnvoyTerminal()">Envoy Terminal</button>
-            <div class="auth-status">
-                <span>Claude Auth:</span>
-                <div id="auth-indicator" class="auth-indicator"></div>
-            </div>
-        </div>
-    </header>
+    <div class="scanlines"></div>
 
-    <nav class="tabs">
-        <div class="tab active" onclick="switchTab('dashboard')">Dashboard</div>
+    <nav class="top-nav">
+        <div class="brand">PROTECTORATE <span>//ENVOY</span></div>
+        <div class="nav-right">
+            <button class="btn" onclick="openEnvoyTerminal()">Terminal</button>
+            <span class="cluster-badge">cluster: local</span>
+            <span id="auth-badge" class="admin-badge unauthenticated">AUTH</span>
+        </div>
+    </nav>
+
+    <nav class="tab-nav">
+        <div class="tab active" onclick="switchTab('sleeves')">Sleeves</div>
+        <div class="tab" onclick="switchTab('needlecast')">Needlecast</div>
+        <div class="tab" onclick="switchTab('logs')">Logs</div>
+        <div class="tab" onclick="switchTab('config')">Config</div>
         <div class="tab" onclick="switchTab('workspaces')">Workspaces</div>
         <div class="tab" onclick="switchTab('doctor')">Doctor</div>
     </nav>
 
-    <div id="tab-dashboard" class="tab-content active">
-        <main class="main">
-            <div class="panel">
-                <div class="panel-header">
-                    <span class="panel-title">Docker Containers</span>
-                    <button class="btn btn-secondary" onclick="refreshContainers()">Refresh</button>
-                </div>
-                <div class="panel-body">
-                    <table id="containers-table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Image</th>
-                                <th>Version</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
+    <!-- SLEEVES TAB -->
+    <div id="tab-sleeves" class="tab-content active">
+        <main class="main-content">
+            <div class="dashboard-header">
+                <h1 class="dashboard-title">SLEEVE REGISTRY</h1>
+                <div class="dashboard-stats">
+                    <div class="stat">
+                        <div id="stat-active" class="stat-value">0</div>
+                        <div class="stat-label">Active</div>
+                    </div>
+                    <button class="btn btn-primary" onclick="showSpawnModal()">+ SPAWN SLEEVE</button>
                 </div>
             </div>
-
-            <div class="panel">
-                <div class="panel-header">
-                    <span class="panel-title">Docker Networks</span>
-                </div>
-                <div class="panel-body">
-                    <table id="networks-table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Driver</th>
-                                <th>Scope</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
+            <div id="sleeves-grid" class="sleeve-grid">
+                <div class="empty-state">No sleeves running. Click "+ SPAWN SLEEVE" to create one.</div>
             </div>
+        </main>
+    </div>
 
-            <div class="panel full-width">
-                <div class="panel-header">
-                    <span class="panel-title">Sleeves</span>
-                    <button class="btn" onclick="showSpawnModal()">+ Spawn Sleeve</button>
+    <!-- NEEDLECAST TAB -->
+    <div id="tab-needlecast" class="tab-content">
+        <main class="main-content">
+            <div class="dashboard-header">
+                <h1 class="dashboard-title">NEEDLECAST</h1>
+            </div>
+            <div class="needlecast-layout">
+                <div class="needlecast-sidebar">
+                    <div class="needlecast-sidebar-title">Sleeves</div>
+                    <div class="needlecast-sleeve-item active">GLOBAL</div>
+                    <div id="needlecast-sleeve-list"></div>
                 </div>
-                <div class="panel-body">
-                    <div id="sleeves-grid" class="sleeves-grid">
-                        <div class="empty-state">No sleeves running. Click "+ Spawn Sleeve" to create one.</div>
+                <div class="needlecast-main">
+                    <div class="needlecast-messages">
+                        <div class="placeholder-content">
+                            <div class="placeholder-title">Inter-Sleeve Messaging</div>
+                            <div class="placeholder-desc">Select a sleeve to view messages. Needlecast enables real-time communication between sleeves via filesystem-based messaging.</div>
+                        </div>
+                    </div>
+                    <div class="needlecast-input">
+                        <input type="text" placeholder="Message content..." disabled>
+                        <button class="btn" disabled>Send</button>
+                    </div>
+                </div>
+                <div class="needlecast-thread">
+                    <div class="needlecast-thread-title">Thread Visualization</div>
+                    <div class="placeholder-content" style="min-height: 200px;">
+                        <div class="placeholder-desc">Message flow visualization coming soon</div>
                     </div>
                 </div>
             </div>
         </main>
     </div>
 
+    <!-- LOGS TAB -->
+    <div id="tab-logs" class="tab-content">
+        <main class="main-content">
+            <div class="dashboard-header">
+                <h1 class="dashboard-title">LOGS</h1>
+            </div>
+            <div class="panel">
+                <div class="panel-body">
+                    <div class="placeholder-content">
+                        <div class="placeholder-title">System Logs</div>
+                        <div class="placeholder-desc">Aggregated logs from Envoy and all active sleeves. Coming soon.</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- CONFIG TAB -->
+    <div id="tab-config" class="tab-content">
+        <main class="main-content">
+            <div class="dashboard-header">
+                <h1 class="dashboard-title">CONFIGURATION</h1>
+            </div>
+            <div class="panel">
+                <div class="panel-body">
+                    <div class="placeholder-content">
+                        <div class="placeholder-title">System Configuration</div>
+                        <div class="placeholder-desc">Envoy and sleeve configuration management. Coming soon.</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- WORKSPACES TAB -->
     <div id="tab-workspaces" class="tab-content">
-        <main class="main">
-            <div class="panel full-width">
+        <main class="main-content">
+            <div class="panel">
                 <div class="panel-header">
-                    <span class="panel-title">Workspaces</span>
+                    <span class="panel-title">WORKSPACES</span>
                     <div style="display: flex; align-items: center;">
                         <span id="fetch-indicator" class="fetch-indicator" style="display: none;">fetching...</span>
-                        <button class="btn" onclick="showCloneModal()">+ Clone from Git</button>
+                        <button class="btn btn-primary" onclick="showCloneModal()">+ Clone from Git</button>
                     </div>
                 </div>
                 <div class="panel-body">
@@ -556,12 +1038,13 @@
         </main>
     </div>
 
+    <!-- DOCTOR TAB -->
     <div id="tab-doctor" class="tab-content">
-        <main class="main">
-            <div class="panel full-width">
+        <main class="main-content">
+            <div class="panel">
                 <div class="panel-header">
-                    <span class="panel-title">System Health Checks</span>
-                    <button class="btn btn-secondary" onclick="refreshDoctor()">Refresh</button>
+                    <span class="panel-title">SYSTEM HEALTH CHECKS</span>
+                    <button class="btn" onclick="refreshDoctor()">Refresh</button>
                 </div>
                 <div class="panel-body">
                     <div id="doctor-checks" class="doctor-checks">
@@ -572,13 +1055,14 @@
         </main>
     </div>
 
+    <!-- SPAWN MODAL -->
     <div id="spawn-modal" class="modal">
         <div class="modal-content">
             <div id="spawn-loading" class="spawn-loading">
                 <div class="spinner"></div>
                 <div class="spawn-loading-text">Spawning sleeve...</div>
             </div>
-            <h2 class="modal-title">Spawn New Sleeve</h2>
+            <h2 class="modal-title">SPAWN NEW SLEEVE</h2>
             <form id="spawn-form" onsubmit="spawnSleeve(event)">
                 <div class="form-group">
                     <label class="form-label">Workspace</label>
@@ -611,20 +1095,21 @@
                            placeholder="Auto-assigned from pool">
                 </div>
                 <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="hideSpawnModal()">Cancel</button>
-                    <button type="submit" class="btn">Spawn</button>
+                    <button type="button" class="btn" onclick="hideSpawnModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Spawn</button>
                 </div>
             </form>
         </div>
     </div>
 
+    <!-- CLONE MODAL -->
     <div id="clone-modal" class="modal">
         <div class="modal-content">
             <div id="clone-loading" class="spawn-loading">
                 <div class="spinner"></div>
                 <div class="clone-loading-text">Cloning repository...</div>
             </div>
-            <h2 class="modal-title">Clone Repository</h2>
+            <h2 class="modal-title">CLONE REPOSITORY</h2>
             <form id="clone-form" onsubmit="cloneWorkspace(event)">
                 <div class="form-group">
                     <label class="form-label">Repository URL</label>
@@ -643,21 +1128,22 @@
                 </div>
                 <div id="clone-error" class="error-text hidden"></div>
                 <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="hideCloneModal()">Cancel</button>
-                    <button type="submit" class="btn" id="clone-submit-btn">Clone</button>
+                    <button type="button" class="btn" onclick="hideCloneModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="clone-submit-btn">Clone</button>
                 </div>
             </form>
         </div>
     </div>
 
+    <!-- SWITCH BRANCH MODAL -->
     <div id="switch-branch-modal" class="modal">
         <div class="modal-content">
             <div id="switch-loading" class="spawn-loading">
                 <div class="spinner"></div>
                 <div class="switch-loading-text">Switching branch...</div>
             </div>
-            <h2 class="modal-title">Switch Branch</h2>
-            <p style="margin-bottom: 1rem;">Workspace: <strong id="switch-ws-name"></strong></p>
+            <h2 class="modal-title">SWITCH BRANCH</h2>
+            <p style="margin-bottom: 1rem; color: var(--text-secondary);">Workspace: <strong id="switch-ws-name" style="color: var(--cyan-glow);"></strong></p>
             <form id="switch-form" onsubmit="switchBranch(event)">
                 <div class="form-group">
                     <label class="form-label">Select Branch</label>
@@ -667,39 +1153,40 @@
                 </div>
                 <div id="switch-error" class="error-text hidden"></div>
                 <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="hideSwitchModal()">Cancel</button>
-                    <button type="submit" class="btn" id="switch-submit-btn">Switch</button>
+                    <button type="button" class="btn" onclick="hideSwitchModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="switch-submit-btn">Switch</button>
                 </div>
             </form>
             <input type="hidden" id="switch-ws-path">
         </div>
     </div>
 
+    <!-- CSTACK INIT MODAL -->
     <div id="cstack-init-modal" class="modal">
         <div class="modal-content">
-            <h2 class="modal-title">Initialize Cstack</h2>
-            <p>Workspace: <strong id="cstack-init-ws-name"></strong></p>
+            <h2 class="modal-title">INITIALIZE CSTACK</h2>
+            <p style="color: var(--text-secondary);">Workspace: <strong id="cstack-init-ws-name" style="color: var(--cyan-glow);"></strong></p>
 
             <form id="cstack-init-form" onsubmit="initCstack(event)">
                 <div class="form-group">
                     <label class="form-label">Choose initialization mode:</label>
 
-                    <div style="margin:0.75rem 0;padding:0.75rem;background:#0d1117;border:1px solid #30363d;border-radius:6px">
+                    <div style="margin:0.75rem 0;padding:0.75rem;background:var(--bg-deep);border:1px solid var(--cyan-subtle);border-radius:6px">
                         <label style="display:flex;align-items:start;cursor:pointer">
                             <input type="radio" name="cstack-mode" value="minimal" checked style="margin-top:4px">
                             <div style="margin-left:0.5rem">
-                                <strong>Minimal</strong>
-                                <div style="color:#8b949e;font-size:0.85rem">Create empty .cstack/ directory</div>
+                                <strong style="color:var(--text-primary)">Minimal</strong>
+                                <div style="color:var(--text-secondary);font-size:var(--text-sm)">Create empty .cstack/ directory</div>
                             </div>
                         </label>
                     </div>
 
-                    <div style="margin:0.75rem 0;padding:0.75rem;background:#0d1117;border:1px solid #30363d;border-radius:6px">
+                    <div style="margin:0.75rem 0;padding:0.75rem;background:var(--bg-deep);border:1px solid var(--cyan-subtle);border-radius:6px">
                         <label style="display:flex;align-items:start;cursor:pointer">
                             <input type="radio" name="cstack-mode" value="interview" style="margin-top:4px">
                             <div style="margin-left:0.5rem">
-                                <strong>Interview (Recommended)</strong>
-                                <div style="color:#8b949e;font-size:0.85rem">Init + mark for Claude interview on sleeve spawn</div>
+                                <strong style="color:var(--text-primary)">Interview (Recommended)</strong>
+                                <div style="color:var(--text-secondary);font-size:var(--text-sm)">Init + mark for Claude interview on sleeve spawn</div>
                             </div>
                         </label>
                     </div>
@@ -708,24 +1195,25 @@
                 <div id="cstack-init-error" class="error-text hidden"></div>
 
                 <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="hideCstackInitModal()">Cancel</button>
-                    <button type="submit" class="btn" id="cstack-init-btn">Initialize</button>
+                    <button type="button" class="btn" onclick="hideCstackInitModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="cstack-init-btn">Initialize</button>
                 </div>
             </form>
             <input type="hidden" id="cstack-init-ws-path">
         </div>
     </div>
 
+    <!-- TERMINAL MODAL -->
     <div id="terminal-modal" class="modal">
         <div class="modal-content terminal-modal">
             <div class="terminal-header">
                 <div style="display: flex; align-items: center;">
-                    <span id="terminal-title">Terminal</span>
+                    <span id="terminal-title" style="color: var(--cyan-glow);">Terminal</span>
                     <span id="terminal-readonly-badge" class="terminal-readonly-badge">Read-Only</span>
                     <span id="terminal-status" class="terminal-status"></span>
                     <span id="reconnect-info" class="reconnect-info"></span>
                 </div>
-                <button class="btn btn-secondary" onclick="hideTerminalModal()">Close</button>
+                <button class="btn" onclick="hideTerminalModal()">Close</button>
             </div>
             <div id="terminal-container" class="terminal-container"></div>
         </div>
@@ -741,8 +1229,8 @@
         let lastFetchAllTime = 0;
         const FETCH_ALL_THROTTLE_MS = 60000;
 
-        const MSG_DATA = 0x30;   // '0' - input/output data
-        const MSG_RESIZE = 0x31; // '1' - resize command
+        const MSG_DATA = 0x30;
+        const MSG_RESIZE = 0x31;
 
         function buildTerminalMessage(type, data) {
             const msg = new Uint8Array(data.length + 1);
@@ -756,15 +1244,21 @@
         function switchTab(tabName) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            const tabIndex = tabName === 'dashboard' ? 1 : tabName === 'workspaces' ? 2 : 3;
-            document.querySelector(`.tab:nth-child(${tabIndex})`).classList.add('active');
-            document.getElementById(`tab-${tabName}`).classList.add('active');
+
+            const tabs = ['sleeves', 'needlecast', 'logs', 'config', 'workspaces', 'doctor'];
+            const tabIndex = tabs.indexOf(tabName);
+            if (tabIndex >= 0) {
+                document.querySelectorAll('.tab')[tabIndex].classList.add('active');
+                document.getElementById(`tab-${tabName}`).classList.add('active');
+            }
 
             if (tabName === 'workspaces') {
                 refreshWorkspacesTable();
                 triggerFetchAllThrottled();
             } else if (tabName === 'doctor') {
                 refreshDoctor();
+            } else if (tabName === 'needlecast') {
+                updateNeedlecastSleeveList();
             }
         }
 
@@ -867,61 +1361,51 @@
                 this.term = new Terminal({
                     cursorBlink: true,
                     scrollback: 10000,
-                    // Let xterm handle scroll in normal buffer, send to app in alternate
                     altScrollPassthrough: true,
-                    // Better font rendering
                     fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Menlo, Monaco, "Courier New", monospace',
                     fontSize: 14,
                     fontWeight: 400,
                     fontWeightBold: 600,
                     letterSpacing: 0,
                     lineHeight: 1.2,
-                    // Improved theme (GitHub Dark Dimmed inspired)
                     theme: {
-                        background: '#0d1117',
-                        foreground: '#c9d1d9',
-                        cursor: '#58a6ff',
-                        cursorAccent: '#0d1117',
-                        selectionBackground: '#264f78',
+                        background: '#0a0a0f',
+                        foreground: '#e0e0e0',
+                        cursor: '#00f5ff',
+                        cursorAccent: '#0a0a0f',
+                        selectionBackground: '#004d4f',
                         selectionForeground: '#ffffff',
-                        selectionInactiveBackground: '#264f7850',
-                        black: '#484f58',
-                        red: '#ff7b72',
-                        green: '#3fb950',
-                        yellow: '#d29922',
-                        blue: '#58a6ff',
-                        magenta: '#bc8cff',
-                        cyan: '#39c5cf',
-                        white: '#b1bac4',
-                        brightBlack: '#6e7681',
-                        brightRed: '#ffa198',
-                        brightGreen: '#56d364',
-                        brightYellow: '#e3b341',
-                        brightBlue: '#79c0ff',
-                        brightMagenta: '#d2a8ff',
-                        brightCyan: '#56d4dd',
-                        brightWhite: '#f0f6fc'
+                        selectionInactiveBackground: '#004d4f50',
+                        black: '#505060',
+                        red: '#ff0055',
+                        green: '#00f5ff',
+                        yellow: '#ffaa00',
+                        blue: '#00a5aa',
+                        magenta: '#ff0055',
+                        cyan: '#00f5ff',
+                        white: '#e0e0e0',
+                        brightBlack: '#808090',
+                        brightRed: '#ff3377',
+                        brightGreen: '#33ffff',
+                        brightYellow: '#ffcc33',
+                        brightBlue: '#33cccc',
+                        brightMagenta: '#ff3377',
+                        brightCyan: '#33ffff',
+                        brightWhite: '#ffffff'
                     }
                 });
                 this.fitAddon = new FitAddon.FitAddon();
                 this.term.loadAddon(this.fitAddon);
-                // Web links addon - makes URLs clickable
                 this.webLinksAddon = new WebLinksAddon.WebLinksAddon();
                 this.term.loadAddon(this.webLinksAddon);
                 this.term.open(this.container);
                 this.fitAddon.fit();
 
-                // Smart wheel handler: respects buffer type and scroll boundaries
                 this.term.element.addEventListener('wheel', (e) => {
                     const buffer = this.term.buffer.active;
-
-                    // In alternate screen (fullscreen apps), let altScrollPassthrough handle it
-                    // Don't interfere - app controls scroll behavior
                     if (buffer.type === 'alternate') {
                         return;
                     }
-
-                    // In normal buffer: prevent scroll past edges to avoid arrow key injection
                     const atTop = buffer.viewportY === 0;
                     const atBottom = buffer.viewportY >= buffer.baseY;
                     const scrollingUp = e.deltaY < 0;
@@ -1055,99 +1539,78 @@
             try {
                 const resp = await fetch('/api/auth/status');
                 const data = await resp.json();
-                const indicator = document.getElementById('auth-indicator');
+                const badge = document.getElementById('auth-badge');
                 if (data.authenticated) {
-                    indicator.classList.add('authenticated');
+                    badge.classList.remove('unauthenticated');
+                    badge.classList.add('authenticated');
+                    badge.textContent = 'ADMIN';
                 } else {
-                    indicator.classList.remove('authenticated');
+                    badge.classList.remove('authenticated');
+                    badge.classList.add('unauthenticated');
+                    badge.textContent = 'AUTH';
                 }
             } catch (e) {
                 console.error('Failed to check auth:', e);
             }
         }
 
-        function parseImageVersion(image) {
-            const parts = image.split(':');
-            if (parts.length > 1) {
-                return { name: parts[0], version: parts.slice(1).join(':') };
-            }
-            return { name: image, version: 'latest' };
-        }
-
-        function formatImageDisplay(containerName, imageName) {
-            if (containerName === 'envoy-dev' && imageName === 'protectorate/base') {
-                return 'protectorate/envoy (dev->bin mnt)';
-            }
-            return imageName;
-        }
-
-        async function refreshContainers() {
-            try {
-                const resp = await fetch('/api/docker/containers');
-                const containers = await resp.json();
-                const tbody = document.querySelector('#containers-table tbody');
-                tbody.innerHTML = containers.map(c => {
-                    const { name: imageName, version } = parseImageVersion(c.image);
-                    const displayName = formatImageDisplay(c.name, imageName);
-                    return `
-                    <tr>
-                        <td>${c.name || c.id}</td>
-                        <td>${displayName}</td>
-                        <td>${version}</td>
-                        <td class="status-${c.state}">${c.status}</td>
-                    </tr>
-                    `;
-                }).join('');
-            } catch (e) {
-                console.error('Failed to fetch containers:', e);
-            }
-        }
-
-        async function refreshNetworks() {
-            try {
-                const resp = await fetch('/api/docker/networks');
-                const networks = await resp.json();
-                const tbody = document.querySelector('#networks-table tbody');
-                tbody.innerHTML = networks.map(n => `
-                    <tr>
-                        <td>${n.name}</td>
-                        <td>${n.driver}</td>
-                        <td>${n.scope}</td>
-                    </tr>
-                `).join('');
-            } catch (e) {
-                console.error('Failed to fetch networks:', e);
-            }
-        }
+        let sleevesCache = [];
 
         async function refreshSleeves() {
             try {
                 const resp = await fetch('/api/sleeves');
                 const sleeves = await resp.json();
+                sleevesCache = sleeves;
                 const grid = document.getElementById('sleeves-grid');
+                const statActive = document.getElementById('stat-active');
+
+                statActive.textContent = sleeves.length;
 
                 if (sleeves.length === 0) {
-                    grid.innerHTML = '<div class="empty-state">No sleeves running. Click "+ Spawn Sleeve" to create one.</div>';
+                    grid.innerHTML = '<div class="empty-state">No sleeves running. Click "+ SPAWN SLEEVE" to create one.</div>';
                     return;
                 }
 
                 grid.innerHTML = sleeves.map(s => `
-                    <div class="sleeve-card">
-                        <div class="sleeve-name">${s.name}</div>
-                        <div class="sleeve-meta">
-                            <div>Container: ${s.container_id}</div>
-                            <div>Workspace: ${s.workspace}</div>
+                    <div class="sleeve-card healthy">
+                        <div class="sleeve-header">
+                            <span class="sleeve-name">SLEEVE: ${escapeHtml(s.name)}</span>
+                            <span class="sleeve-status active">ACTIVE</span>
+                        </div>
+                        <div class="sleeve-body">
+                            <div class="sleeve-row">
+                                <span class="sleeve-label">DHF</span>
+                                <span class="sleeve-value">Claude Code</span>
+                            </div>
+                            <div class="sleeve-row">
+                                <span class="sleeve-label">Workspace</span>
+                                <span class="sleeve-value">${escapeHtml(s.workspace)}</span>
+                            </div>
+                            <div class="sleeve-row">
+                                <span class="sleeve-label">Container</span>
+                                <span class="sleeve-value" style="font-size: var(--text-sm); color: var(--text-secondary);">${escapeHtml(s.container_id)}</span>
+                            </div>
                         </div>
                         <div class="sleeve-actions">
-                            <button class="btn btn-secondary" onclick="openTerminal('${s.name}')">Terminal</button>
-                            <button class="btn btn-secondary" onclick="openTerminalObserve('${s.name}')">Observe</button>
-                            <button class="btn btn-danger" onclick="killSleeve('${s.name}')">Kill</button>
+                            <button class="btn" onclick="openTerminal('${escapeHtml(s.name)}')">TERMINAL</button>
+                            <button class="btn" onclick="openTerminalObserve('${escapeHtml(s.name)}')">OBSERVE</button>
+                            <button class="btn btn-danger" onclick="killSleeve('${escapeHtml(s.name)}')">KILL</button>
                         </div>
                     </div>
                 `).join('');
+
+                updateNeedlecastSleeveList();
             } catch (e) {
                 console.error('Failed to fetch sleeves:', e);
             }
+        }
+
+        function updateNeedlecastSleeveList() {
+            const list = document.getElementById('needlecast-sleeve-list');
+            if (!list) return;
+            list.innerHTML = sleevesCache.map(s =>
+                `<div class="needlecast-sleeve-item">${escapeHtml(s.name)}</div>`
+            ).join('');
         }
 
         let workspacesCache = [];
@@ -1296,17 +1759,17 @@
             const escapedName = ws.name.replace(/'/g, "\\'");
 
             return `<div class="action-buttons">
-                <button class="btn btn-secondary btn-small" ${commitDisabled} title="${commitTitle}"
+                <button class="btn btn-small" ${commitDisabled} title="${commitTitle}"
                         onclick="commitChanges('${escapedPath}', this)">Commit</button>
-                <button class="btn btn-secondary btn-small" ${pushDisabled} title="${pushTitle}"
+                <button class="btn btn-small" ${pushDisabled} title="${pushTitle}"
                         onclick="pushChanges('${escapedPath}', this)">Push</button>
-                <button class="btn btn-secondary btn-small" ${switchDisabled} title="${switchTitle}"
+                <button class="btn btn-small" ${switchDisabled} title="${switchTitle}"
                         onclick="showSwitchModal('${escapedPath}', '${escapedName}')">Switch</button>
-                <button class="btn btn-secondary btn-small" ${fetchDisabled} title="${isGitRepo ? 'Fetch from remote' : 'Not a git repository'}"
+                <button class="btn btn-small" ${fetchDisabled} title="${isGitRepo ? 'Fetch from remote' : 'Not a git repository'}"
                         onclick="fetchRemote('${escapedPath}', this)">Fetch</button>
-                <button class="btn btn-secondary btn-small" ${pullDisabled} title="${pullTitle}"
+                <button class="btn btn-small" ${pullDisabled} title="${pullTitle}"
                         onclick="pullRemote('${escapedPath}', this)">Pull</button>
-                <button class="btn btn-secondary btn-small" disabled title="Open in IDE (coming soon)"
+                <button class="btn btn-small" disabled title="Open in IDE (coming soon)"
                         onclick="viewWorkspace('${escapedPath}')">View</button>
             </div>`;
         }
@@ -1315,12 +1778,12 @@
 
         function formatCstackStatus(cstack, ws) {
             if (initializingCstackPaths.has(ws.path)) {
-                return `<span style="color:#8b949e"><span class="inline-spinner"></span> Initializing...</span>`;
+                return `<span style="color:var(--text-secondary)"><span class="inline-spinner"></span> Initializing...</span>`;
             }
 
             if (!cstack || !cstack.exists) {
                 const escapedPath = ws.path.replace(/'/g, "\\'");
-                return `<button class="btn btn-secondary btn-small"
+                return `<button class="btn btn-small"
                         onclick="showCstackInitModal('${escapedPath}', '${ws.name}')">
                     Init Stack
                 </button>`;
@@ -1328,20 +1791,20 @@
 
             const parts = [];
             if (cstack.ready > 0) {
-                parts.push(`<span style="color:#3fb950;font-weight:600">${cstack.ready} ready</span>`);
+                parts.push(`<span style="color:var(--cyan-glow);font-weight:600">${cstack.ready} ready</span>`);
             }
             if (cstack.in_progress > 0) {
-                parts.push(`<span style="color:#58a6ff">${cstack.in_progress} active</span>`);
+                parts.push(`<span style="color:var(--cyan-dim)">${cstack.in_progress} active</span>`);
             }
             if (cstack.blocked > 0) {
-                parts.push(`<span style="color:#f85149">${cstack.blocked} blocked</span>`);
+                parts.push(`<span style="color:var(--magenta-glow)">${cstack.blocked} blocked</span>`);
             }
             if (cstack.open > 0 && cstack.ready === 0 && cstack.in_progress === 0) {
-                parts.push(`<span style="color:#d29922">${cstack.open} open</span>`);
+                parts.push(`<span style="color:var(--amber-glow)">${cstack.open} open</span>`);
             }
 
             if (parts.length === 0) {
-                return `<span style="color:#8b949e">No tasks</span>`;
+                return `<span style="color:var(--text-secondary)">No tasks</span>`;
             }
 
             return parts.join(' / ');
@@ -1611,10 +2074,6 @@
             }
         }
 
-        // TODO: Implement workspace view - options to consider:
-        // - LazyGit in a terminal modal
-        // - VS Code in a container (code-server)
-        // - Web-based file browser
         function viewWorkspace(wsPath) {
             alert('View workspace coming soon. Options: LazyGit, VS Code (code-server), or web file browser.');
         }
@@ -1637,7 +2096,6 @@
             const wsPath = document.getElementById('cstack-init-ws-path').value;
             const mode = document.querySelector('input[name="cstack-mode"]:checked').value;
 
-            // Close modal immediately and show spinner in table
             hideCstackInitModal();
             initializingCstackPaths.add(wsPath);
             await refreshWorkspacesTable();
@@ -1655,7 +2113,6 @@
                 const result = await resp.json();
                 initializingCstackPaths.delete(wsPath);
 
-                // "already initialized" is fine - cstack exists, just refresh
                 if (!result.success && result.error && !result.error.includes('already')) {
                     alert('Cstack init failed: ' + result.error);
                 }
@@ -1870,7 +2327,6 @@
                 hideSpawnLoading();
                 hideSpawnModal();
                 refreshSleeves();
-                refreshContainers();
             } catch (e) {
                 hideSpawnLoading();
                 console.error('Failed to spawn sleeve:', e);
@@ -1891,7 +2347,6 @@
                     return;
                 }
                 refreshSleeves();
-                refreshContainers();
             } catch (e) {
                 console.error('Failed to kill sleeve:', e);
             }
@@ -1940,13 +2395,10 @@
         }
 
         checkAuth();
-        refreshContainers();
-        refreshNetworks();
         refreshSleeves();
 
         setInterval(() => {
             refreshSleeves();
-            refreshContainers();
         }, 5000);
     </script>
 </body>
