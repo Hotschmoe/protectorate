@@ -39,43 +39,9 @@ This affects architecture significantly. Worth dedicated discussion.
 
 ---
 
-## 2. Consolidate .env.example and Install Script
+## 2. Consolidate .env.example and Install Script [DONE]
 
-### Problem
-Git identity defaults are hardcoded in two places:
-- `.env.example` - has `GIT_COMMITTER_NAME=Protectorate`
-- `install.sh` create_env() - also sets these values
-
-This is a maintenance burden and source of drift.
-
-### Options
-
-**Option A: Single source in .env.example (Preferred)**
-- Change `.env.example` to use `${HOME}/protectorate/workspaces` instead of `${PWD}`
-- Install script just downloads and copies: `curl ... .env.example -o .env`
-- Pros: Single source of truth, less code
-- Cons: .env.example becomes less "example-y", more "production default"
-- Tradeoff is acceptable since Doctor guides customization
-
-**Option B: Download + sed replacements**
-- Install downloads .env.example
-- Uses sed to replace ${PWD} with actual path
-- Pros: .env.example stays generic
-- Cons: Fragile sed scripts, more complexity
-
-**Option C: Keep separate (current state)**
-- Maintain both files independently
-- Pros: None
-- Cons: Duplication, drift, maintenance burden
-
-### Recommendation
-Implement Option A. The .env.example file becomes the canonical default configuration. Users who clone the repo for development can still use it directly. Install script just copies it.
-
-### Implementation Steps
-1. Update `.env.example`:
-   - Change `WORKSPACE_HOST_ROOT=${PWD}/workspaces` to `${HOME}/protectorate/workspaces`
-   - Ensure all defaults are production-ready
-2. Update `install.sh`:
-   - Remove `create_env()` function body
-   - Replace with: `curl -fsSL "$RAW_GITHUB/.env.example" -o .env`
-3. Test fresh install
+Implemented Option A:
+- `.env.example` now uses `${HOME}/protectorate/workspaces`
+- `install.sh` downloads `.env.example` directly instead of generating inline
+- Single source of truth for all configuration defaults
