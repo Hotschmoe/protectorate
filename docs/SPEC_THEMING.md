@@ -4,19 +4,46 @@ This document defines the visual themes and UX patterns for the Envoy WebUI.
 
 ---
 
+## Decision: Neo-Noir Cyberpunk Theme
+
+**Status**: APPROVED
+**Date**: 2026-01-27
+
+After reviewing mockups, we are implementing the **Neo-Noir Cyberpunk** theme as the sole theme for the Envoy WebUI. This decision honors the Altered Carbon source material and provides a distinctive, cohesive visual identity.
+
+### Mockups
+
+Working HTML mockups are available in `docs/mockups/`:
+
+| File | Description |
+|------|-------------|
+| `01-cyberpunk-dashboard.html` | Sleeve registry dashboard with status cards |
+| `03-cyberpunk-needlecast.html` | Needlecast messaging view (3-column layout) |
+| `04-cyberpunk-components.html` | Component library reference |
+
+Open these directly in a browser to preview the design.
+
+### Rationale
+
+- Honors the Altered Carbon universe aesthetic (sleeves, cortical stacks, Protectorate)
+- Distinctive visual identity that sets Protectorate apart
+- Medium density balances information and readability
+- Glow effects and color coding provide clear status at a glance
+
+### Not Implementing
+
+- **NORAD Command theme**: Deferred. May revisit for terminal/TUI mode later.
+- **Theme switching**: Single theme simplifies implementation and maintenance.
+
+---
+
 ## Overview
 
-The Envoy WebUI supports multiple themes to accommodate different use cases:
-
-| Theme | Use Case | Density | Primary Users |
-|-------|----------|---------|---------------|
-| Neo-Noir Cyberpunk | Default experience | Medium | All users |
-| NORAD Command | Compact monitoring, TUI-style | High | Power users, terminals |
-| Medical Monitor | Reference/inspiration | High | (Not implemented directly) |
-
-**Primary Theme**: Neo-Noir Cyberpunk (honors Altered Carbon source material)
-**Secondary Theme**: NORAD Command (compact/terminal mode for dense monitoring)
-**Inspiration Source**: Medical Monitor (influences status visualization in both themes)
+| Theme | Status | Notes |
+|-------|--------|-------|
+| Neo-Noir Cyberpunk | **IMPLEMENTING** | Primary and only theme |
+| NORAD Command | Deferred | Reference preserved below for future consideration |
+| Medical Monitor | Reference only | Influences status visualization patterns |
 
 ---
 
@@ -210,7 +237,9 @@ Keep animations functional, not decorative:
 
 ---
 
-## Theme 2: NORAD Command (Compact/TUI Mode)
+## Theme 2: NORAD Command (DEFERRED)
+
+> **Note**: This theme is not being implemented in the initial release. Preserved here for future reference if a compact/TUI mode is needed.
 
 ### Philosophy
 
@@ -392,46 +421,42 @@ Medical UIs are designed to avoid alarm fatigue:
 
 ### CSS Custom Properties
 
-All themes should use CSS custom properties for easy switching:
+Use CSS custom properties for consistent theming:
 
 ```css
 :root {
-  /* Set by theme selection */
-  --bg-primary: var(--neo-noir-bg-deep);
-  --text-primary: var(--neo-noir-text-primary);
-  --accent-primary: var(--neo-noir-cyan-glow);
-  /* etc */
+  /* Background Layers */
+  --bg-deep: #0a0a0f;
+  --bg-surface: #12121a;
+  --bg-elevated: #1a1a24;
+
+  /* Cyan Accents */
+  --cyan-glow: #00f5ff;
+  --cyan-dim: #00a5aa;
+  --cyan-subtle: #004d4f;
+
+  /* Amber Accents */
+  --amber-glow: #ffaa00;
+  --amber-dim: #aa7700;
+
+  /* Magenta Accents */
+  --magenta-glow: #ff0055;
+  --magenta-dim: #aa0038;
+
+  /* Text */
+  --text-primary: #e0e0e0;
+  --text-secondary: #808090;
+  --text-muted: #505060;
 }
-
-[data-theme="norad"] {
-  --bg-primary: var(--norad-bg-terminal);
-  --text-primary: var(--norad-green-normal);
-  --accent-primary: var(--norad-green-bright);
-}
 ```
-
-### Theme Toggle
-
-Simple toggle in top nav:
-
-```
-[PROTECTORATE //ENVOY]                    [THEME: Cyberpunk v] [ADMIN]
-                                                   |
-                                                   +-> Cyberpunk
-                                                       NORAD (Compact)
-```
-
-Persist selection in localStorage.
 
 ### Responsive Behavior
 
-| Breakpoint | Cyberpunk | NORAD |
-|------------|-----------|-------|
-| Desktop (1200px+) | Full layout, all effects | Full table view |
-| Tablet (768-1199px) | Reduced effects, card stack | Condensed table |
-| Mobile (<768px) | Single column cards | Force landscape or block |
-
-NORAD theme may display "Best viewed on desktop" warning on mobile.
+| Breakpoint | Behavior |
+|------------|----------|
+| Desktop (1200px+) | Full layout, all effects, grid cards |
+| Tablet (768-1199px) | Reduced glow effects, card stack |
+| Mobile (<768px) | Single column cards, simplified layout |
 
 ### Accessibility
 
@@ -446,11 +471,10 @@ Both themes must maintain WCAG 2.1 AA compliance:
 
 ## Asset Requirements
 
-### Fonts (self-hosted or CDN)
+### Fonts (Google Fonts CDN)
 
-- JetBrains Mono (primary monospace)
-- Orbitron (display headers, Cyberpunk only)
-- IBM Plex Mono (NORAD theme)
+- **JetBrains Mono** - Primary monospace font for all text
+- **Orbitron** - Display font for headers and branding
 
 ### Icons
 
@@ -462,34 +486,27 @@ Minimal icon set, monochrome, designed for small sizes:
 
 Recommend: Lucide Icons or custom SVG set.
 
-### Sound (Optional)
-
-NORAD theme could support optional audio:
-
-- Soft beep on new needlecast
-- Alert klaxon on critical status (user-configurable)
-
-Default: OFF (respect user attention)
-
 ---
 
 ## Future Considerations
 
-### Theme: Holographic (WebGL)
+### NORAD Compact Mode
+
+If demand exists for a high-density terminal view, revisit the NORAD theme specification above.
+
+### Holographic Visualization (WebGL)
 
 A more advanced 3D visualization could render sleeves as:
 - Floating cortical stack models
 - Particle-based needlecast streams
 - Spatial arrangement by relationship/communication frequency
 
-Deferred until core themes are stable.
+Deferred until core WebUI is stable.
 
-### Theme: Print/Export
+### Audio Alerts (Optional)
 
-A high-contrast, ink-friendly theme for:
-- PDF reports
-- Screenshot documentation
-- Accessibility users who prefer stark contrast
+- Soft notification on new needlecast
+- Alert sound on critical status (user-configurable, default OFF)
 
 ---
 
