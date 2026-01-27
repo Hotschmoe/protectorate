@@ -156,6 +156,42 @@ func (s *Server) handleEnvoyTerminal(w http.ResponseWriter, r *http.Request) {
 	gateway.Start(w, r)
 }
 
+func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
+	// Strip "/static/" prefix to get the file path
+	filePath := "web/static/" + r.URL.Path[len("/static/"):]
+
+	// DEV_MODE: Serve from filesystem for hot-reload
+	if os.Getenv("DEV_MODE") == "true" {
+		devPaths := []string{
+			"/app/" + filePath,                          // Mounted in container
+			"./internal/envoy/" + filePath,              // Local development
+		}
+		for _, path := range devPaths {
+			if _, err := os.Stat(path); err == nil {
+				http.ServeFile(w, r, path)
+				return
+			}
+		}
+	}
+
+	// PROD: Serve from embedded filesystem
+	content, err := webFS.ReadFile(filePath)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Set content type based on file extension
+	switch {
+	case strings.HasSuffix(filePath, ".css"):
+		w.Header().Set("Content-Type", "text/css")
+	case strings.HasSuffix(filePath, ".js"):
+		w.Header().Set("Content-Type", "application/javascript")
+	}
+
+	w.Write(content)
+}
+
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)

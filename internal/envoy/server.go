@@ -71,6 +71,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/agent-doctor/sync", s.handleAgentDoctorSync)
 	mux.HandleFunc("/api/agent-doctor/init", s.handleAgentDoctorInit)
 	mux.HandleFunc("/api/agent-doctor/diff", s.handleAgentDoctorDiff)
+	mux.HandleFunc("/static/", s.handleStatic)
 	mux.HandleFunc("/", s.handleIndex)
 }
 
