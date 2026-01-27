@@ -131,6 +131,121 @@ check_claude() {
     success "Claude CLI is available ($(claude --version 2>/dev/null | head -1))"
 }
 
+check_nodejs() {
+    info "Checking Node.js..."
+
+    if command -v node &> /dev/null; then
+        NODE_VERSION=$(node --version 2>/dev/null | sed 's/v//')
+        NODE_MAJOR=$(echo "$NODE_VERSION" | cut -d. -f1)
+
+        if [[ "$NODE_MAJOR" -ge 20 ]]; then
+            success "Node.js $NODE_VERSION available"
+            NODEJS_AVAILABLE=true
+            return 0
+        else
+            warn "Node.js $NODE_VERSION found, but 20+ recommended for Gemini/Codex CLI"
+        fi
+    else
+        warn "Node.js not found"
+    fi
+
+    # Attempt to install Node.js
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        info "Installing Node.js 20 via NodeSource..."
+        if curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && \
+           sudo apt-get install -y nodejs; then
+            success "Node.js installed"
+            NODEJS_AVAILABLE=true
+            return 0
+        else
+            warn "Could not auto-install Node.js. Install manually: https://nodejs.org/"
+        fi
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        if command -v brew &> /dev/null; then
+            info "Installing Node.js via Homebrew..."
+            if brew install node@20; then
+                success "Node.js installed"
+                NODEJS_AVAILABLE=true
+                return 0
+            fi
+        fi
+        warn "Install Node.js 20+ from https://nodejs.org/ for Gemini/Codex CLI support"
+    fi
+
+    NODEJS_AVAILABLE=false
+    return 1
+}
+
+check_gemini() {
+    info "Checking Gemini CLI..."
+
+    if command -v gemini &> /dev/null; then
+        success "Gemini CLI is available"
+        return 0
+    fi
+
+    if [[ "$NODEJS_AVAILABLE" != "true" ]]; then
+        warn "Skipping Gemini CLI (requires Node.js 20+)"
+        return 0
+    fi
+
+    echo ""
+    echo -e "${YELLOW}Gemini CLI not found.${NC}"
+    if [[ -t 0 ]]; then
+        read -p "Install Gemini CLI? [y/N] " -n 1 -r
+        echo ""
+    else
+        read -p "Install Gemini CLI? [y/N] " -n 1 -r </dev/tty 2>/dev/null || REPLY="n"
+        echo ""
+    fi
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        info "Installing Gemini CLI..."
+        if npm install -g @google/gemini-cli; then
+            success "Gemini CLI installed"
+        else
+            warn "Failed to install Gemini CLI"
+        fi
+    else
+        info "Skipping Gemini CLI installation"
+    fi
+}
+
+check_codex() {
+    info "Checking Codex CLI..."
+
+    if command -v codex &> /dev/null; then
+        success "Codex CLI is available"
+        return 0
+    fi
+
+    if [[ "$NODEJS_AVAILABLE" != "true" ]]; then
+        warn "Skipping Codex CLI (requires Node.js 20+)"
+        return 0
+    fi
+
+    echo ""
+    echo -e "${YELLOW}Codex CLI not found.${NC}"
+    if [[ -t 0 ]]; then
+        read -p "Install Codex CLI? [y/N] " -n 1 -r
+        echo ""
+    else
+        read -p "Install Codex CLI? [y/N] " -n 1 -r </dev/tty 2>/dev/null || REPLY="n"
+        echo ""
+    fi
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        info "Installing Codex CLI..."
+        if npm install -g @openai/codex; then
+            success "Codex CLI installed"
+        else
+            warn "Failed to install Codex CLI"
+        fi
+    else
+        info "Skipping Codex CLI installation"
+    fi
+}
+
 # -----------------------------------------------------------------------------
 # Authentication
 # -----------------------------------------------------------------------------
@@ -288,6 +403,9 @@ main() {
     # 1. Check/install dependencies
     check_docker
     check_claude
+    check_nodejs
+    check_gemini
+    check_codex
 
     # 2. Handle authentication
     if ! check_claude_auth; then

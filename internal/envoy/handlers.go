@@ -455,6 +455,8 @@ func (s *Server) handleDoctor(w http.ResponseWriter, r *http.Request) {
 
 	checks = append(checks, checkSSHAgent())
 	checks = append(checks, checkClaudeCredentials())
+	checks = append(checks, checkGeminiCredentials())
+	checks = append(checks, checkCodexCredentials())
 	checks = append(checks, s.checkDocker())
 	checks = append(checks, checkGitIdentity())
 	checks = append(checks, s.checkRavenNetwork())
@@ -528,6 +530,82 @@ func checkClaudeCredentials() protocol.DoctorCheck {
 		Status:     "fail",
 		Message:    "Credentials file not found",
 		Suggestion: "Run 'claude auth login' in a sleeve to authenticate",
+	}
+}
+
+func checkGeminiCredentials() protocol.DoctorCheck {
+	// Check for API key first
+	if os.Getenv("GEMINI_API_KEY") != "" {
+		return protocol.DoctorCheck{
+			Name:    "Gemini Credentials",
+			Status:  "pass",
+			Message: "Authenticated via API key",
+		}
+	}
+
+	// Check for OAuth tokens
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		homeDir = "/home/claude"
+	}
+	oauthPaths := []string{
+		homeDir + "/.config/gemini-cli/oauth_tokens.json",
+		homeDir + "/.gemini/oauth_tokens.json",
+	}
+
+	for _, path := range oauthPaths {
+		if _, err := os.Stat(path); err == nil {
+			return protocol.DoctorCheck{
+				Name:    "Gemini Credentials",
+				Status:  "pass",
+				Message: "Authenticated via OAuth",
+			}
+		}
+	}
+
+	return protocol.DoctorCheck{
+		Name:       "Gemini Credentials",
+		Status:     "warning",
+		Message:    "Not authenticated (optional)",
+		Suggestion: "Set GEMINI_API_KEY or run 'gemini' to authenticate",
+	}
+}
+
+func checkCodexCredentials() protocol.DoctorCheck {
+	// Check for API key first
+	if os.Getenv("OPENAI_API_KEY") != "" {
+		return protocol.DoctorCheck{
+			Name:    "Codex Credentials",
+			Status:  "pass",
+			Message: "Authenticated via API key",
+		}
+	}
+
+	// Check for cached auth
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		homeDir = "/home/claude"
+	}
+	authPaths := []string{
+		homeDir + "/.codex/auth.json",
+		homeDir + "/.config/codex/auth.json",
+	}
+
+	for _, path := range authPaths {
+		if _, err := os.Stat(path); err == nil {
+			return protocol.DoctorCheck{
+				Name:    "Codex Credentials",
+				Status:  "pass",
+				Message: "Authenticated via cached auth",
+			}
+		}
+	}
+
+	return protocol.DoctorCheck{
+		Name:       "Codex Credentials",
+		Status:     "warning",
+		Message:    "Not authenticated (optional)",
+		Suggestion: "Set OPENAI_API_KEY or run 'codex' to authenticate",
 	}
 }
 
