@@ -10,11 +10,12 @@ import (
 )
 
 type Server struct {
-	cfg        *config.EnvoyConfig
-	http       *http.Server
-	docker     *DockerClient
-	sleeves    *SleeveManager
-	workspaces *WorkspaceManager
+	cfg         *config.EnvoyConfig
+	http        *http.Server
+	docker      *DockerClient
+	sleeves     *SleeveManager
+	workspaces  *WorkspaceManager
+	agentDoctor *AgentDoctorManager
 }
 
 func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
@@ -25,16 +26,18 @@ func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
 
 	sleeves := NewSleeveManager(docker, cfg)
 	workspaces := NewWorkspaceManager(cfg, sleeves.List)
+	agentDoctor := NewAgentDoctorManager(cfg)
 
 	if err := sleeves.RecoverSleeves(); err != nil {
 		return nil, fmt.Errorf("failed to recover sleeves: %w", err)
 	}
 
 	s := &Server{
-		cfg:        cfg,
-		docker:     docker,
-		sleeves:    sleeves,
-		workspaces: workspaces,
+		cfg:         cfg,
+		docker:      docker,
+		sleeves:     sleeves,
+		workspaces:  workspaces,
+		agentDoctor: agentDoctor,
 	}
 
 	mux := http.NewServeMux()
@@ -64,6 +67,10 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/sleeves/", s.handleSleeveByName)
 	mux.HandleFunc("/sleeves/", s.handleSleeveTerminal)
 	mux.HandleFunc("/envoy/terminal", s.handleEnvoyTerminal)
+	mux.HandleFunc("/api/agent-doctor/status", s.handleAgentDoctorStatus)
+	mux.HandleFunc("/api/agent-doctor/sync", s.handleAgentDoctorSync)
+	mux.HandleFunc("/api/agent-doctor/init", s.handleAgentDoctorInit)
+	mux.HandleFunc("/api/agent-doctor/diff", s.handleAgentDoctorDiff)
 	mux.HandleFunc("/", s.handleIndex)
 }
 

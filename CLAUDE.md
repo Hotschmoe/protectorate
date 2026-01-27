@@ -2,6 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+<!-- BEGIN PROTECTORATE COMMON -->
+<!-- DO NOT EDIT - Managed by Agent Doctor -->
+
 ## RULE 1 - ABSOLUTE (DO NOT EVER VIOLATE THIS)
 
 You may NOT delete any file or directory unless I explicitly give the exact command **in this session**.
@@ -73,6 +76,8 @@ We optimize for clean architecture, not backwards compatibility. **When we refac
 ```
 
 **Work is not complete until `git push` succeeds.**
+
+<!-- END PROTECTORATE COMMON -->
 
 ---
 

@@ -109,3 +109,83 @@ type DoctorCheck struct {
 	Message    string `json:"message"`
 	Suggestion string `json:"suggestion,omitempty"`
 }
+
+// AgentDoctorConfig represents the agent-doctor/config.yaml structure
+type AgentDoctorConfig struct {
+	Version    int      `yaml:"version" json:"version"`
+	MasterPath string   `yaml:"master_path" json:"master_path"`
+	Workspaces []string `yaml:"workspaces" json:"workspaces"`
+}
+
+// AgentDoctorFileStatus represents the sync status of a single file
+type AgentDoctorFileStatus struct {
+	Path     string `json:"path"`
+	InSync   bool   `json:"in_sync"`
+	Exists   bool   `json:"exists"`
+	MasterAt string `json:"master_at,omitempty"`
+}
+
+// AgentDoctorWorkspaceStatus represents the sync status of a single workspace
+type AgentDoctorWorkspaceStatus struct {
+	Name         string                  `json:"name"`
+	Path         string                  `json:"path"`
+	HasClaudeMD  bool                    `json:"has_claude_md"`
+	IsManaged    bool                    `json:"is_managed"`
+	LastSynced   string                  `json:"last_synced,omitempty"`
+	ClaudeMDSync bool                    `json:"claude_md_in_sync"`
+	Agents       []AgentDoctorFileStatus `json:"agents"`
+	Skills       []AgentDoctorFileStatus `json:"skills"`
+}
+
+// AgentDoctorStatus represents the overall sync status
+type AgentDoctorStatus struct {
+	MasterPath string                       `json:"master_path"`
+	Workspaces []AgentDoctorWorkspaceStatus `json:"workspaces"`
+}
+
+// AgentDoctorSyncRequest is the request body for syncing workspaces
+type AgentDoctorSyncRequest struct {
+	Workspace string `json:"workspace,omitempty"`
+	DryRun    bool   `json:"dry_run"`
+}
+
+// AgentDoctorSyncChange represents a single change in a sync operation
+type AgentDoctorSyncChange struct {
+	Action string `json:"action"` // "update", "create", "skip"
+	File   string `json:"file"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// AgentDoctorSyncResult is the result of a sync operation
+type AgentDoctorSyncResult struct {
+	DryRun    bool                    `json:"dry_run"`
+	Workspace string                  `json:"workspace"`
+	Changes   []AgentDoctorSyncChange `json:"changes"`
+	Error     string                  `json:"error,omitempty"`
+}
+
+// AgentDoctorInitRequest is the request body for initializing a workspace
+type AgentDoctorInitRequest struct {
+	Workspace string `json:"workspace"`
+}
+
+// AgentDoctorInitResult is the result of an init operation
+type AgentDoctorInitResult struct {
+	Success   bool   `json:"success"`
+	Workspace string `json:"workspace"`
+	Message   string `json:"message,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// AgentDoctorDiffEntry represents a single diff entry
+type AgentDoctorDiffEntry struct {
+	File   string `json:"file"`
+	Status string `json:"status"` // "added", "modified", "removed"
+	Diff   string `json:"diff,omitempty"`
+}
+
+// AgentDoctorDiffResult is the result of a diff operation
+type AgentDoctorDiffResult struct {
+	Workspace string                 `json:"workspace"`
+	Entries   []AgentDoctorDiffEntry `json:"entries"`
+}

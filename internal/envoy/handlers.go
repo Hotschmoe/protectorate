@@ -692,3 +692,90 @@ func (s *Server) checkRavenNetwork() protocol.DoctorCheck {
 		Suggestion: "Run: docker network create raven",
 	}
 }
+
+func (s *Server) handleAgentDoctorStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	workspace := r.URL.Query().Get("workspace")
+	status, err := s.agentDoctor.GetStatus(workspace)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(status)
+}
+
+func (s *Server) handleAgentDoctorSync(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req protocol.AgentDoctorSyncRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		req = protocol.AgentDoctorSyncRequest{}
+	}
+
+	result, err := s.agentDoctor.Sync(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func (s *Server) handleAgentDoctorInit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req protocol.AgentDoctorInitRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Workspace == "" {
+		http.Error(w, "workspace required", http.StatusBadRequest)
+		return
+	}
+
+	result, err := s.agentDoctor.Init(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func (s *Server) handleAgentDoctorDiff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	workspace := r.URL.Query().Get("workspace")
+	if workspace == "" {
+		http.Error(w, "workspace parameter required", http.StatusBadRequest)
+		return
+	}
+
+	result, err := s.agentDoctor.Diff(workspace)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
