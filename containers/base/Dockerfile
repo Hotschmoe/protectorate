@@ -9,15 +9,17 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-ARG ABDUCO_VERSION=0.6
-RUN curl -fsSL "https://github.com/martanne/abduco/archive/refs/tags/v${ABDUCO_VERSION}.tar.gz" \
-    -o /tmp/abduco.tar.gz \
-    && tar -xzf /tmp/abduco.tar.gz -C /tmp \
-    && cd /tmp/abduco-${ABDUCO_VERSION} \
+# dtach: lightweight session manager (scroll works, unlike abduco)
+ARG DTACH_VERSION=0.9
+RUN curl -fsSL "https://github.com/crigler/dtach/archive/refs/tags/v${DTACH_VERSION}.tar.gz" \
+    -o /tmp/dtach.tar.gz \
+    && tar -xzf /tmp/dtach.tar.gz -C /tmp \
+    && cd /tmp/dtach-${DTACH_VERSION} \
+    && ./configure \
     && make \
-    && mv abduco /usr/local/bin/ \
-    && chmod +x /usr/local/bin/abduco \
-    && rm -rf /tmp/abduco*
+    && mv dtach /usr/local/bin/ \
+    && chmod +x /usr/local/bin/dtach \
+    && rm -rf /tmp/dtach*
 
 ARG CSTACK_VERSION=1.0.1
 RUN curl -fsSL "https://github.com/Hotschmoe/cstack/releases/download/v${CSTACK_VERSION}/cstack-v${CSTACK_VERSION}-linux_amd64.tar.gz" \
@@ -28,7 +30,7 @@ RUN curl -fsSL "https://github.com/Hotschmoe/cstack/releases/download/v${CSTACK_
     && rm /tmp/cstack.tar.gz
 
 RUN useradd -m -s /bin/bash -u 1000 claude \
-    && mkdir -p /home/claude/.claude /home/claude/.abduco /etc/claude \
+    && mkdir -p /home/claude/.claude /home/claude/.dtach /etc/claude \
     && chown -R claude:claude /home/claude
 
 USER claude

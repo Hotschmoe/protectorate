@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Protectorate Envoy</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -200,6 +203,34 @@
         .terminal-container {
             height: calc(100% - 50px);
             padding: 0.5rem;
+            background: #0d1117;
+            border-radius: 4px;
+        }
+        /* xterm.js customizations */
+        .terminal-container .xterm {
+            padding: 8px;
+        }
+        .terminal-container .xterm-viewport {
+            /* Styled scrollbar */
+            scrollbar-width: thin;
+            scrollbar-color: #484f58 #0d1117;
+        }
+        .terminal-container .xterm-viewport::-webkit-scrollbar {
+            width: 8px;
+        }
+        .terminal-container .xterm-viewport::-webkit-scrollbar-track {
+            background: #0d1117;
+        }
+        .terminal-container .xterm-viewport::-webkit-scrollbar-thumb {
+            background: #484f58;
+            border-radius: 4px;
+        }
+        .terminal-container .xterm-viewport::-webkit-scrollbar-thumb:hover {
+            background: #6e7681;
+        }
+        .terminal-container .xterm-screen {
+            /* Subtle text shadow for readability */
+            text-shadow: 0 0 1px rgba(0, 0, 0, 0.3);
         }
         .full-width { grid-column: 1 / -1; }
         .empty-state {
@@ -702,6 +733,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js"></script>
     <script>
         let currentConnection = null;
         let currentCloneJobId = null;
@@ -820,6 +852,7 @@
                 this.term = null;
                 this.ws = null;
                 this.fitAddon = null;
+                this.webLinksAddon = null;
                 this.reconnectAttempts = 0;
                 this.maxReconnectAttempts = 10;
                 this.baseDelay = 1000;
@@ -833,15 +866,72 @@
                 this.container.innerHTML = '';
                 this.term = new Terminal({
                     cursorBlink: true,
+                    scrollback: 10000,
+                    // Let xterm handle scroll in normal buffer, send to app in alternate
+                    altScrollPassthrough: true,
+                    // Better font rendering
+                    fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Menlo, Monaco, "Courier New", monospace',
+                    fontSize: 14,
+                    fontWeight: 400,
+                    fontWeightBold: 600,
+                    letterSpacing: 0,
+                    lineHeight: 1.2,
+                    // Improved theme (GitHub Dark Dimmed inspired)
                     theme: {
                         background: '#0d1117',
-                        foreground: '#c9d1d9'
+                        foreground: '#c9d1d9',
+                        cursor: '#58a6ff',
+                        cursorAccent: '#0d1117',
+                        selectionBackground: '#264f78',
+                        selectionForeground: '#ffffff',
+                        selectionInactiveBackground: '#264f7850',
+                        black: '#484f58',
+                        red: '#ff7b72',
+                        green: '#3fb950',
+                        yellow: '#d29922',
+                        blue: '#58a6ff',
+                        magenta: '#bc8cff',
+                        cyan: '#39c5cf',
+                        white: '#b1bac4',
+                        brightBlack: '#6e7681',
+                        brightRed: '#ffa198',
+                        brightGreen: '#56d364',
+                        brightYellow: '#e3b341',
+                        brightBlue: '#79c0ff',
+                        brightMagenta: '#d2a8ff',
+                        brightCyan: '#56d4dd',
+                        brightWhite: '#f0f6fc'
                     }
                 });
                 this.fitAddon = new FitAddon.FitAddon();
                 this.term.loadAddon(this.fitAddon);
+                // Web links addon - makes URLs clickable
+                this.webLinksAddon = new WebLinksAddon.WebLinksAddon();
+                this.term.loadAddon(this.webLinksAddon);
                 this.term.open(this.container);
                 this.fitAddon.fit();
+
+                // Smart wheel handler: respects buffer type and scroll boundaries
+                this.term.element.addEventListener('wheel', (e) => {
+                    const buffer = this.term.buffer.active;
+
+                    // In alternate screen (fullscreen apps), let altScrollPassthrough handle it
+                    // Don't interfere - app controls scroll behavior
+                    if (buffer.type === 'alternate') {
+                        return;
+                    }
+
+                    // In normal buffer: prevent scroll past edges to avoid arrow key injection
+                    const atTop = buffer.viewportY === 0;
+                    const atBottom = buffer.viewportY >= buffer.baseY;
+                    const scrollingUp = e.deltaY < 0;
+                    const scrollingDown = e.deltaY > 0;
+
+                    if ((scrollingDown && atBottom) || (scrollingUp && atTop)) {
+                        e.stopPropagation();
+                        e.preventDefault();
+                    }
+                }, { capture: true, passive: false });
 
                 if (!this.readOnly) {
                     this.term.onData((data) => {

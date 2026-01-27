@@ -128,7 +128,7 @@ func (s *Server) handleSleeveTerminal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	readOnly := r.URL.Query().Get("mode") == "observe"
-	socketPath := "/home/claude/.abduco/claude.sock"
+	socketPath := "/home/claude/.dtach/session.sock"
 
 	gateway := NewTerminalGateway(s.docker, sleeve.ContainerName, socketPath, readOnly)
 	gateway.Start(w, r)
@@ -136,7 +136,7 @@ func (s *Server) handleSleeveTerminal(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleEnvoyTerminal(w http.ResponseWriter, r *http.Request) {
 	readOnly := r.URL.Query().Get("mode") == "observe"
-	socketPath := "/home/claude/.abduco/envoy.sock"
+	socketPath := "/home/claude/.dtach/session.sock"
 
 	envoyContainer, err := s.docker.GetContainerByName("envoy-dev")
 	if err != nil || envoyContainer == nil {

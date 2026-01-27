@@ -131,15 +131,19 @@ func (g *TerminalGateway) waitForInit() error {
 }
 
 func (g *TerminalGateway) startExecSession() error {
-	cmd := []string{"abduco", "-a", g.socketPath}
+	// dtach -a: attach to existing session, -e: detach key (Ctrl+\), -z: disable suspend
+	cmd := []string{"dtach", "-a", g.socketPath, "-e", `^\`, "-z"}
 
 	session, err := g.docker.ExecAttach(g.ctx, ExecAttachOptions{
 		Container: g.container,
 		Cmd:       cmd,
 		User:      "claude",
-		Env:       []string{"TERM=xterm-256color"},
-		Cols:      g.initialCols,
-		Rows:      g.initialRows,
+		Env: []string{
+			"TERM=xterm-256color",
+			"PATH=/home/claude/.local/bin:/usr/local/bin:/usr/bin:/bin",
+		},
+		Cols: g.initialCols,
+		Rows: g.initialRows,
 	})
 	if err != nil {
 		return err
