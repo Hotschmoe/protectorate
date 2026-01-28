@@ -2,13 +2,17 @@ package envoy
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/hotschmoe/protectorate/internal/protocol"
 )
 
 type DockerClient struct {
@@ -249,4 +253,95 @@ func (d *DockerClient) ExecResize(ctx context.Context, execID string, cols, rows
 // ExecInspect returns information about an exec session
 func (d *DockerClient) ExecInspect(ctx context.Context, execID string) (container.ExecInspect, error) {
 	return d.cli.ContainerExecInspect(ctx, execID)
+}
+
+// ContainerCounts holds running and total container counts
+type ContainerCounts struct {
+	Running int
+	Total   int
+}
+
+// GetContainerCounts returns the number of running and total containers
+func (d *DockerClient) GetContainerCounts(ctx context.Context) (*ContainerCounts, error) {
+	containers, err := d.cli.ContainerList(ctx, container.ListOptions{All: true})
+	if err != nil {
+		return nil, err
+	}
+
+	counts := &ContainerCounts{Total: len(containers)}
+	for _, c := range containers {
+		if c.State == "running" {
+			counts.Running++
+		}
+	}
+	return counts, nil
+}
+
+// statsCache caches container stats to avoid excessive Docker API calls
+type statsCache struct {
+	mu    sync.RWMutex
+	data  map[string]*cachedStats
+	ttl   time.Duration
+}
+
+type cachedStats struct {
+	stats     *protocol.ContainerResourceStats
+	timestamp time.Time
+}
+
+var containerStatsCache = &statsCache{
+	data: make(map[string]*cachedStats),
+	ttl:  5 * time.Second,
+}
+
+// GetContainerStats returns resource stats for a container (cached for 5s)
+func (d *DockerClient) GetContainerStats(ctx context.Context, containerID string) (*protocol.ContainerResourceStats, error) {
+	containerStatsCache.mu.RLock()
+	if cached, ok := containerStatsCache.data[containerID]; ok {
+		if time.Since(cached.timestamp) < containerStatsCache.ttl {
+			containerStatsCache.mu.RUnlock()
+			return cached.stats, nil
+		}
+	}
+	containerStatsCache.mu.RUnlock()
+
+	resp, err := d.cli.ContainerStats(ctx, containerID, false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get container stats: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var stats types.StatsJSON
+	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+		return nil, fmt.Errorf("failed to decode stats: %w", err)
+	}
+
+	result := &protocol.ContainerResourceStats{}
+
+	result.MemoryUsedBytes = stats.MemoryStats.Usage
+	result.MemoryLimitBytes = stats.MemoryStats.Limit
+	if result.MemoryLimitBytes > 0 {
+		result.MemoryPercent = float64(result.MemoryUsedBytes) / float64(result.MemoryLimitBytes) * 100
+	}
+
+	cpuDelta := float64(stats.CPUStats.CPUUsage.TotalUsage - stats.PreCPUStats.CPUUsage.TotalUsage)
+	systemDelta := float64(stats.CPUStats.SystemUsage - stats.PreCPUStats.SystemUsage)
+	if systemDelta > 0 && cpuDelta > 0 {
+		numCPUs := float64(stats.CPUStats.OnlineCPUs)
+		if numCPUs == 0 {
+			numCPUs = float64(len(stats.CPUStats.CPUUsage.PercpuUsage))
+		}
+		if numCPUs > 0 {
+			result.CPUPercent = (cpuDelta / systemDelta) * numCPUs * 100
+		}
+	}
+
+	containerStatsCache.mu.Lock()
+	containerStatsCache.data[containerID] = &cachedStats{
+		stats:     result,
+		timestamp: time.Now(),
+	}
+	containerStatsCache.mu.Unlock()
+
+	return result, nil
 }

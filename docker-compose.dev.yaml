@@ -31,6 +31,9 @@ services:
       # Docker socket for sleeve management
       - /var/run/docker.sock:/var/run/docker.sock
 
+      # Host proc for system stats
+      - /proc:/host/proc:ro
+
       # Claude credentials and settings
       - ${HOME}/.claude/.credentials.json:/home/claude/.claude/.credentials.json:ro
       - ${HOME}/.claude.json:/etc/claude/settings.json:ro

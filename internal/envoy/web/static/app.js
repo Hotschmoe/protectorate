@@ -4,6 +4,23 @@ let clonePollingInterval = null;
 let lastFetchAllTime = 0;
 const FETCH_ALL_THROTTLE_MS = 60000;
 
+function formatDuration(ms) {
+    if (ms < 0) ms = 0;
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function formatBytes(bytes, decimals = 1) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i];
+}
+
 const MSG_DATA = 0x30;
 const MSG_RESIZE = 0x31;
 
@@ -331,6 +348,55 @@ async function checkAuth() {
 
 let sleevesCache = [];
 
+async function refreshHostStats() {
+    try {
+        const resp = await fetch('/api/host/stats');
+        const stats = await resp.json();
+
+        if (stats.cpu) {
+            const cpuEl = document.getElementById('host-cpu-value');
+            const cpuBarEl = document.getElementById('host-cpu-bar');
+            const cpuDetailEl = document.getElementById('host-cpu-detail');
+            if (cpuEl) cpuEl.textContent = Math.round(stats.cpu.usage_percent) + '%';
+            if (cpuBarEl) cpuBarEl.style.width = stats.cpu.usage_percent + '%';
+            if (cpuDetailEl) cpuDetailEl.textContent = `${stats.cpu.cores} cores / ${stats.cpu.threads} threads`;
+        }
+
+        if (stats.memory) {
+            const memEl = document.getElementById('host-memory-value');
+            const memBarEl = document.getElementById('host-memory-bar');
+            const memDetailEl = document.getElementById('host-memory-detail');
+            const usedGB = (stats.memory.used_bytes / (1024 * 1024 * 1024)).toFixed(1);
+            const totalGB = (stats.memory.total_bytes / (1024 * 1024 * 1024)).toFixed(1);
+            if (memEl) memEl.textContent = usedGB + ' GB';
+            if (memBarEl) memBarEl.style.width = stats.memory.percent + '%';
+            if (memDetailEl) memDetailEl.textContent = `${usedGB} / ${totalGB} GB used`;
+        }
+
+        if (stats.disk) {
+            const diskEl = document.getElementById('host-disk-value');
+            const diskBarEl = document.getElementById('host-disk-bar');
+            const diskDetailEl = document.getElementById('host-disk-detail');
+            const usedGB = Math.round(stats.disk.used_bytes / (1024 * 1024 * 1024));
+            const totalGB = Math.round(stats.disk.total_bytes / (1024 * 1024 * 1024));
+            if (diskEl) diskEl.textContent = usedGB + ' GB';
+            if (diskBarEl) diskBarEl.style.width = stats.disk.percent + '%';
+            if (diskDetailEl) diskDetailEl.textContent = `${usedGB} / ${totalGB} GB used`;
+        }
+
+        if (stats.docker) {
+            const dockerEl = document.getElementById('host-docker-value');
+            const dockerBarEl = document.getElementById('host-docker-bar');
+            const dockerDetailEl = document.getElementById('host-docker-detail');
+            if (dockerEl) dockerEl.textContent = stats.docker.running_containers;
+            if (dockerBarEl) dockerBarEl.style.width = (stats.docker.running_containers / stats.docker.max_containers * 100) + '%';
+            if (dockerDetailEl) dockerDetailEl.textContent = `${stats.docker.running_containers} containers / ${stats.docker.max_containers} limit`;
+        }
+    } catch (e) {
+        console.error('Failed to fetch host stats:', e);
+    }
+}
+
 function getWorkspaceName(workspacePath) {
     if (!workspacePath) return 'unknown';
     const parts = workspacePath.split('/');
@@ -354,16 +420,21 @@ async function refreshSleeves() {
 
         grid.innerHTML = sleeves.map(s => {
             const wsName = getWorkspaceName(s.workspace);
-            // Static placeholder values for now
-            const uptime = '00:15:42';
-            const integrity = 98.7;
-            const memUsed = 2.1;
-            const memTotal = 4.0;
-            const memPct = Math.round((memUsed / memTotal) * 100);
-            const cpuPct = 23;
+            const uptime = formatDuration(Date.now() - new Date(s.spawn_time).getTime());
+            const integrity = s.integrity !== undefined ? s.integrity.toFixed(1) : 100;
+
+            let memUsed = 0, memTotal = 0, memPct = 0, cpuPct = 0;
+            if (s.resources) {
+                memUsed = (s.resources.memory_used_bytes / (1024 * 1024 * 1024)).toFixed(1);
+                memTotal = (s.resources.memory_limit_bytes / (1024 * 1024 * 1024)).toFixed(1);
+                memPct = Math.round(s.resources.memory_percent || 0);
+                cpuPct = Math.round(s.resources.cpu_percent || 0);
+            }
+
+            const healthClass = integrity >= 80 ? 'healthy' : integrity >= 50 ? 'warning' : 'critical';
 
             return `
-            <div class="sleeve-card healthy">
+            <div class="sleeve-card ${healthClass}">
                 <div class="sleeve-header">
                     <span class="sleeve-name">SLEEVE: ${escapeHtml(s.name)}</span>
                     <span class="sleeve-status active">ACTIVE</span>
@@ -1219,7 +1290,12 @@ function hideTerminalModal() {
 // Initialize on page load
 checkAuth();
 refreshSleeves();
+refreshHostStats();
 
 setInterval(() => {
     refreshSleeves();
 }, 5000);
+
+setInterval(() => {
+    refreshHostStats();
+}, 30000);

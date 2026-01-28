@@ -76,6 +76,12 @@ func (wm *WorkspaceManager) List() ([]protocol.WorkspaceInfo, error) {
 			ws.Cstack = cstackInfo
 		}
 
+		ws.SizeBytes = getWorkspaceSize(wsPath)
+		const sizeWarningThreshold = 10 * 1024 * 1024 * 1024   // 10GB
+		const sizeCriticalThreshold = 20 * 1024 * 1024 * 1024  // 20GB
+		ws.SizeWarning = ws.SizeBytes > sizeWarningThreshold
+		ws.SizeCritical = ws.SizeBytes > sizeCriticalThreshold
+
 		workspaces = append(workspaces, ws)
 	}
 
@@ -359,6 +365,21 @@ func runGitCommand(wsPath string, args ...string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+func getWorkspaceSize(wsPath string) int64 {
+	cmd := exec.Command("du", "-sb", wsPath)
+	out, err := cmd.Output()
+	if err != nil {
+		return 0
+	}
+	parts := strings.Fields(string(out))
+	if len(parts) == 0 {
+		return 0
+	}
+	var size int64
+	fmt.Sscanf(parts[0], "%d", &size)
+	return size
 }
 
 func getCstackInfo(wsPath string) *protocol.CstackStats {

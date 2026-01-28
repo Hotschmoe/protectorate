@@ -4,12 +4,58 @@ import "time"
 
 // SleeveInfo represents a running sleeve container
 type SleeveInfo struct {
-	Name          string    `json:"name"`
-	ContainerID   string    `json:"container_id"`
-	ContainerName string    `json:"container_name"`
-	Workspace     string    `json:"workspace"`
-	SpawnTime     time.Time `json:"spawn_time"`
-	Status        string    `json:"status"`
+	Name          string                  `json:"name"`
+	ContainerID   string                  `json:"container_id"`
+	ContainerName string                  `json:"container_name"`
+	Workspace     string                  `json:"workspace"`
+	SpawnTime     time.Time               `json:"spawn_time"`
+	Status        string                  `json:"status"`
+	Integrity     float64                 `json:"integrity"`
+	Resources     *ContainerResourceStats `json:"resources,omitempty"`
+}
+
+// ContainerResourceStats holds resource usage for a container
+type ContainerResourceStats struct {
+	MemoryUsedBytes  uint64  `json:"memory_used_bytes"`
+	MemoryLimitBytes uint64  `json:"memory_limit_bytes"`
+	MemoryPercent    float64 `json:"memory_percent"`
+	CPUPercent       float64 `json:"cpu_percent"`
+}
+
+// HostStats holds system-level resource statistics
+type HostStats struct {
+	CPU    *CPUStats    `json:"cpu"`
+	Memory *MemoryStats `json:"memory"`
+	Disk   *DiskStats   `json:"disk"`
+	Docker *DockerStats `json:"docker"`
+}
+
+// CPUStats holds CPU usage information
+type CPUStats struct {
+	UsagePercent float64 `json:"usage_percent"`
+	Cores        int     `json:"cores"`
+	Threads      int     `json:"threads"`
+}
+
+// MemoryStats holds memory usage information
+type MemoryStats struct {
+	UsedBytes  uint64  `json:"used_bytes"`
+	TotalBytes uint64  `json:"total_bytes"`
+	Percent    float64 `json:"percent"`
+}
+
+// DiskStats holds disk usage information
+type DiskStats struct {
+	UsedBytes  uint64  `json:"used_bytes"`
+	TotalBytes uint64  `json:"total_bytes"`
+	Percent    float64 `json:"percent"`
+}
+
+// DockerStats holds Docker container counts
+type DockerStats struct {
+	RunningContainers int `json:"running_containers"`
+	TotalContainers   int `json:"total_containers"`
+	MaxContainers     int `json:"max_containers"`
 }
 
 // SpawnSleeveRequest is the request body for spawning a new sleeve
@@ -37,12 +83,15 @@ type CloneJob struct {
 
 // WorkspaceInfo represents a workspace directory
 type WorkspaceInfo struct {
-	Name       string            `json:"name"`
-	Path       string            `json:"path"`
-	InUse      bool              `json:"in_use"`
-	SleeveName string            `json:"sleeve_name,omitempty"`
-	Git        *WorkspaceGitInfo `json:"git,omitempty"`
-	Cstack     *CstackStats      `json:"cstack,omitempty"`
+	Name         string            `json:"name"`
+	Path         string            `json:"path"`
+	InUse        bool              `json:"in_use"`
+	SleeveName   string            `json:"sleeve_name,omitempty"`
+	Git          *WorkspaceGitInfo `json:"git,omitempty"`
+	Cstack       *CstackStats      `json:"cstack,omitempty"`
+	SizeBytes    int64             `json:"size_bytes"`
+	SizeWarning  bool              `json:"size_warning"`
+	SizeCritical bool              `json:"size_critical"`
 }
 
 // CstackStats represents task statistics from cs stats --json

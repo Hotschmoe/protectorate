@@ -11,6 +11,7 @@ services:
       - PLUGINS_HOST_PATH=${HOME}/.claude/plugins
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/host/proc:ro
       - ~/.claude/.credentials.json:/home/claude/.claude/.credentials.json:ro
       - ~/.claude.json:/etc/claude/settings.json:ro
       - ~/.claude/plugins:/home/claude/.claude/plugins:ro

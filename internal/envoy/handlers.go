@@ -49,10 +49,36 @@ func (s *Server) handleDockerNetworks(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(networks)
 }
 
+func (s *Server) handleHostStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	stats := s.hostStats.GetStats(ctx)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
+}
+
 func (s *Server) handleSleeves(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		sleeves := s.sleeves.List()
+
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		for _, sleeve := range sleeves {
+			sleeve.Integrity = s.sleeves.CalculateIntegrity(sleeve.Workspace)
+
+			if stats, err := s.docker.GetContainerStats(ctx, sleeve.ContainerID); err == nil {
+				sleeve.Resources = stats
+			}
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(sleeves)
 
