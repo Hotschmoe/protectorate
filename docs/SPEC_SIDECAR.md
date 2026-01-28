@@ -1,6 +1,6 @@
 # Sidecar Specification v1
 
-> Lightweight HTTP server running inside each sleeve container for self-reporting and local operations.
+> Lightweight HTTP server running inside each sleeve container for self-reporting.
 
 ## Overview
 
@@ -13,9 +13,8 @@ The sidecar eliminates the need for envoy to exec into containers for status inf
 |                  |  :8080   |  |     SIDECAR      |  |
 |  - spawn/kill    |          |  |  - /health       |  |
 |  - workspace ops |          |  |  - /status       |  |
-|  - terminal proxy|          |  |  - /terminal     |  |
-+------------------+          |  +------------------+  |
-                              |  |   CLAUDE CODE    |  |
+|  - terminal proxy|          |  +------------------+  |
++------------------+          |  |   CLAUDE CODE    |  |
                               |  |   (dtach session)|  |
                               +------------------------+
 ```
@@ -26,26 +25,55 @@ The sidecar eliminates the need for envoy to exec into containers for status inf
 2. **Fast startup** - Ready within 1 second of container start
 3. **Low overhead** - Minimal CPU/memory footprint
 4. **Stateless** - No persistent state, restarts cleanly
-5. **Discoverable** - Self-detects CLI tool and version at startup
+5. **Reporter only** - Does NOT supervise processes (entrypoint.sh does that)
+
+## V1 Scope
+
+### Included (V1)
+
+| Feature | Endpoint | Description |
+|---------|----------|-------------|
+| Health check | GET /health | Basic liveness |
+| DHF detection | GET /status | CLI name + version |
+| Cstack stats | GET /status | Task counts from `cs stats` |
+| Process stats | GET /status | Memory, uptime from /proc |
+| Auth status | GET /status | Credential file presence |
+
+### Excluded (V2+)
+
+| Feature | Reason |
+|---------|--------|
+| Process supervision | entrypoint.sh handles dtach session |
+| Soft resleeve | Requires process control, defer to V2 |
+| Terminal WebSocket | Envoy already proxies via docker exec |
+| Outbox endpoint | Needlecast routing not ready |
+| File browser | Nice-to-have, not critical |
 
 ## API Specification
 
 ### GET /health
 
-Basic liveness check.
+Basic liveness check. Returns immediately if sidecar is running.
 
+**Response:**
 ```json
 {"status": "ok"}
 ```
 
+**Status codes:**
+- 200: Sidecar running
+- (no response): Container/sidecar down
+
 ### GET /status
 
-Comprehensive sleeve status. Envoy calls this instead of exec'ing into containers.
+Comprehensive sleeve status. Replaces envoy's docker exec calls.
 
+**Response:**
 ```json
 {
+  "sleeve_name": "alice",
   "dhf": {
-    "name": "Claude Code",
+    "name": "claude",
     "version": "2.1.20"
   },
   "workspace": {
@@ -61,10 +89,9 @@ Comprehensive sleeve status. Envoy calls this instead of exec'ing into container
     }
   },
   "process": {
-    "pid": 7,
+    "pid": 1,
     "uptime_seconds": 3600,
-    "memory_bytes": 524288000,
-    "memory_percent": 12.5
+    "memory_mb": 512
   },
   "auth": {
     "claude": true,
@@ -73,53 +100,17 @@ Comprehensive sleeve status. Envoy calls this instead of exec'ing into container
 }
 ```
 
-**Implementation notes:**
-- DHF: Detect at startup, cache forever (try claude, gemini, codex in order)
-- Cstack: Run `cs stats --json` in workspace, cache 5 seconds
-- Process: Read from `/proc/self/status` and `/proc/self/stat`
-- Auth: Check file existence (credentials.json, .gemini/, etc.)
+**Field details:**
 
-### GET /terminal (WebSocket)
-
-Optional: Terminal access via WebSocket. Connects to existing dtach session.
-
-Query params:
-- `mode=observe` - Read-only mode (no input sent to terminal)
-
-**Current approach:** Envoy handles terminal gateway via docker exec to dtach.
-**Future option:** Sidecar owns dtach session, envoy proxies WebSocket.
-
-For v1, terminal stays in envoy. Consider moving in v2 if benefits justify complexity.
-
-## What Stays in Envoy
-
-These operations require Docker socket or cross-sleeve coordination:
-
-| Operation | Reason |
-|-----------|--------|
-| Spawn/Kill containers | Docker API access |
-| Container recovery | Enumerate containers on boot |
-| Resource limits | Set at container creation |
-| Workspace mutex | Prevent concurrent mounts |
-| Name allocation | Global pool management |
-| Git operations | Host SSH keys required |
-| Agent doctor sync | Central file distribution |
-| System diagnostics | Host-level checks |
-
-## What Moves to Sidecar
-
-| Operation | Before | After |
-|-----------|--------|-------|
-| DHF detection | Exec `claude --version` | GET /status |
-| Cstack stats | Exec `cs stats --json` | GET /status |
-| Memory/CPU | Docker stats API | GET /status |
-| Auth status | Check host files | GET /status |
-
-**Benefits:**
-- Faster /api/sleeves response (no exec per sleeve)
-- More accurate resource stats (from inside cgroup)
-- Reduced Docker API load
-- Sleeve self-awareness for future features
+| Field | Source | Cache TTL |
+|-------|--------|-----------|
+| sleeve_name | SLEEVE_NAME env var | Forever |
+| dhf.name | Detect at startup (claude, gemini, codex) | Forever |
+| dhf.version | `<cli> --version` at startup | Forever |
+| cstack.* | `cs stats --json` in workspace | 5 seconds |
+| process.* | `/proc/self/stat`, `/proc/self/status` | None (always fresh) |
+| auth.claude | File exists: `~/.claude/.credentials.json` | 30 seconds |
+| auth.gemini | File exists: `~/.gemini/` | 30 seconds |
 
 ## Implementation
 
@@ -127,14 +118,14 @@ These operations require Docker socket or cross-sleeve coordination:
 
 ```
 cmd/sidecar/
-  main.go           # Entry point, starts HTTP server
+  main.go           # Entry point, HTTP server
 
 internal/sidecar/
-  server.go         # HTTP handlers
-  dhf.go            # CLI detection logic
-  cstack.go         # Cstack stats integration
-  process.go        # Process stats from /proc
-  auth.go           # Credential checks
+  server.go         # HTTP handlers, routing
+  dhf.go            # CLI detection (claude, gemini, codex)
+  cstack.go         # Run cs stats, parse output
+  process.go        # Read /proc for memory/uptime
+  auth.go           # Check credential files
 ```
 
 ### Startup Sequence
@@ -152,7 +143,7 @@ internal/sidecar/
 |----------|-------------|---------|
 | SIDECAR_PORT | HTTP listen port | 8080 |
 | WORKSPACE_PATH | Mounted workspace | /home/claude/workspace |
-| SLEEVE_NAME | Container name (from label) | (required) |
+| SLEEVE_NAME | Container name | (required) |
 
 ### Caching Strategy
 
@@ -165,93 +156,125 @@ internal/sidecar/
 
 ## Integration with Envoy
 
-### Before (Current)
+### Current (Exec-based)
 
 ```go
-// handlers.go - list sleeves
-for _, sleeve := range sleeves {
-    // Exec into container for DHF
-    dhf, _ := s.docker.GetDHFInfo(ctx, sleeve.ContainerID)
-    sleeve.DHF = dhf.Name
-    sleeve.DHFVersion = dhf.Version
+// envoy/docker.go - GetDHFInfo
+func (d *DockerClient) GetDHFInfo(ctx context.Context, containerID string) (*DHFInfo, error) {
+    // docker exec <container> claude --version
+    output, err := d.Exec(ctx, containerID, "claude", "--version")
+    // parse output...
 }
 ```
 
-### After (With Sidecar)
+### After (HTTP-based)
 
 ```go
-// handlers.go - list sleeves
-for _, sleeve := range sleeves {
-    // HTTP call to sidecar
-    status, _ := s.getSidecarStatus(ctx, sleeve.ContainerName)
-    sleeve.DHF = status.DHF.Name
-    sleeve.DHFVersion = status.DHF.Version
-    sleeve.Integrity = calculateIntegrity(status.Workspace.Cstack)
+// envoy/sidecar.go - new file
+func (s *Server) getSidecarStatus(ctx context.Context, containerName string) (*SidecarStatus, error) {
+    resp, err := http.Get(fmt.Sprintf("http://%s:8080/status", containerName))
+    // parse JSON...
 }
 ```
 
-### Fallback
+### Fallback Behavior
 
-If sidecar is unreachable (starting up, crashed), envoy should:
+If sidecar is unreachable (starting up, crashed):
 1. Return partial data (omit DHF/cstack)
 2. Mark sleeve status as "degraded"
 3. Retry on next poll cycle
 
-## Future Extensions (v2+)
+## Sleeve Container Changes
+
+### Current entrypoint.sh
+
+```bash
+# Already handles:
+# - dtach session setup
+# - Claude Code execution
+# - Session restart on exit
+exec sleep infinity  # <-- Replace with sidecar
+```
+
+### Updated entrypoint.sh
+
+```bash
+# ... existing dtach setup ...
+
+# Start sidecar instead of sleep infinity
+exec /usr/local/bin/sidecar
+```
+
+### Updated Dockerfile
+
+```dockerfile
+# Add sidecar binary
+COPY --from=builder /sidecar /usr/local/bin/sidecar
+```
+
+## What Stays in Envoy
+
+| Operation | Reason |
+|-----------|--------|
+| Spawn/Kill containers | Docker API access |
+| Terminal gateway | Already works via docker exec + dtach |
+| Workspace git ops | Host SSH keys required |
+| Resource limits | Set at container creation |
+| Needlecast routing | Cross-sleeve coordination |
+
+## What Moves to Sidecar
+
+| Operation | Before (Envoy) | After (Sidecar) |
+|-----------|----------------|-----------------|
+| DHF detection | Exec `claude --version` | GET /status |
+| Cstack stats | Exec `cs stats --json` | GET /status |
+| Memory usage | Docker stats API | GET /status |
+| Auth status | Check host files | GET /status |
+
+**Benefits:**
+- Faster /api/sleeves response (no exec per sleeve)
+- More accurate resource stats (from inside cgroup)
+- Reduced Docker API load
+- Sleeve self-awareness for future features
+
+## Testing
+
+```bash
+# Build and test locally
+go build -o bin/sidecar ./cmd/sidecar
+SLEEVE_NAME=test WORKSPACE_PATH=/tmp ./bin/sidecar &
+curl http://localhost:8080/health
+curl http://localhost:8080/status | jq
+
+# Integration test (requires running sleeve)
+curl http://sleeve-alice:8080/health
+curl http://sleeve-alice:8080/status | jq
+```
+
+## Future Extensions (V2+)
 
 ### Outbox Endpoint
 ```
 GET /outbox
 POST /outbox/clear
 ```
-For needlecast message retrieval (inter-sleeve communication).
+For needlecast message retrieval.
+
+### Soft Resleeve
+```
+POST /resleeve
+Body: {"cli": "gemini"}
+```
+Kill current CLI, start new one in dtach session.
 
 ### Task Status
 ```
 GET /tasks
 ```
-Real-time task list from cstack for richer UI.
-
-### File Browser
-```
-GET /files?path=/home/claude/workspace
-```
-List/read workspace files for web UI file browser.
+Real-time task list from cstack.
 
 ### Metrics Endpoint
 ```
 GET /metrics
 ```
-Prometheus-format metrics for observability stack.
-
-### Resleeve Support
-```
-POST /resleeve
-```
-Trigger CLI switch (soft resleeve) from within container.
-
-## Security Considerations
-
-1. **Network isolation** - Sidecar only accessible on raven network
-2. **No secrets in API** - Auth endpoint reports boolean, not credentials
-3. **Read-only filesystem access** - Sidecar doesn't modify workspace
-4. **Resource limits** - Sidecar respects container cgroup limits
-
-## Testing
-
-```bash
-# Unit tests
-go test ./internal/sidecar/...
-
-# Integration test (requires running sleeve)
-curl http://sleeve-quell:8080/health
-curl http://sleeve-quell:8080/status | jq
-```
-
-## Rollout Plan
-
-1. **Phase 1:** Build sidecar binary, add to sleeve image
-2. **Phase 2:** Start sidecar in entrypoint.sh alongside CLI
-3. **Phase 3:** Update envoy to prefer sidecar /status over exec
-4. **Phase 4:** Remove exec-based DHF detection from envoy
-5. **Phase 5:** Add optional terminal endpoint (v2)
+Prometheus-format metrics.
