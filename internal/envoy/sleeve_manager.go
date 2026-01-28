@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -99,13 +100,26 @@ func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.Sleeve
 		return nil, fmt.Errorf("failed to ensure network: %w", err)
 	}
 
+	constrained := req.MemoryLimitMB > 0 || req.CPULimit > 0
+
+	labels := map[string]string{
+		"protectorate.sleeve":    "true",
+		"protectorate.name":      name,
+		"protectorate.workspace": workspace,
+	}
+	if constrained {
+		labels["protectorate.constrained"] = "true"
+		if req.MemoryLimitMB > 0 {
+			labels["protectorate.memory_limit_mb"] = fmt.Sprintf("%d", req.MemoryLimitMB)
+		}
+		if req.CPULimit > 0 {
+			labels["protectorate.cpu_limit"] = fmt.Sprintf("%d", req.CPULimit)
+		}
+	}
+
 	cfg := &container.Config{
-		Image: m.cfg.Docker.SleeveImage,
-		Labels: map[string]string{
-			"protectorate.sleeve":    "true",
-			"protectorate.name":      name,
-			"protectorate.workspace": workspace,
-		},
+		Image:  m.cfg.Docker.SleeveImage,
+		Labels: labels,
 	}
 
 	workspaceHostPath := m.toHostPath(workspace)
@@ -150,6 +164,16 @@ func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.Sleeve
 		Mounts: mounts,
 	}
 
+	if constrained {
+		hostCfg.Resources = container.Resources{}
+		if req.MemoryLimitMB > 0 {
+			hostCfg.Resources.Memory = req.MemoryLimitMB * 1024 * 1024
+		}
+		if req.CPULimit > 0 {
+			hostCfg.Resources.NanoCPUs = int64(req.CPULimit) * 1e9
+		}
+	}
+
 	netCfg := &network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{
 			m.cfg.Docker.Network: {},
@@ -175,6 +199,9 @@ func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.Sleeve
 		Workspace:     workspace,
 		SpawnTime:     time.Now(),
 		Status:        "running",
+		Constrained:   constrained,
+		MemoryLimitMB: req.MemoryLimitMB,
+		CPULimit:      req.CPULimit,
 	}
 
 	m.mu.Lock()
@@ -285,6 +312,17 @@ func (m *SleeveManager) RecoverSleeves() error {
 			status = c.State
 		}
 
+		constrained := c.Labels["protectorate.constrained"] == "true"
+		var memoryLimitMB int64
+		var cpuLimit int
+		if memStr := c.Labels["protectorate.memory_limit_mb"]; memStr != "" {
+			memoryLimitMB, _ = strconv.ParseInt(memStr, 10, 64)
+		}
+		if cpuStr := c.Labels["protectorate.cpu_limit"]; cpuStr != "" {
+			cpu, _ := strconv.Atoi(cpuStr)
+			cpuLimit = cpu
+		}
+
 		sleeve := &protocol.SleeveInfo{
 			Name:          name,
 			ContainerID:   c.ID[:12],
@@ -292,6 +330,9 @@ func (m *SleeveManager) RecoverSleeves() error {
 			Workspace:     workspace,
 			SpawnTime:     time.Unix(c.Created, 0),
 			Status:        status,
+			Constrained:   constrained,
+			MemoryLimitMB: memoryLimitMB,
+			CPULimit:      cpuLimit,
 		}
 
 		m.sleeves[name] = sleeve

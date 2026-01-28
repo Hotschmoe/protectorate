@@ -69,6 +69,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/sleeves", s.handleSleeves)
 	mux.HandleFunc("/api/sleeves/", s.handleSleeveByName)
 	mux.HandleFunc("/api/host/stats", s.handleHostStats)
+	mux.HandleFunc("/api/host/limits", s.handleHostLimits)
 	mux.HandleFunc("/sleeves/", s.handleSleeveTerminal)
 	mux.HandleFunc("/envoy/terminal", s.handleEnvoyTerminal)
 	mux.HandleFunc("/api/agent-doctor/status", s.handleAgentDoctorStatus)

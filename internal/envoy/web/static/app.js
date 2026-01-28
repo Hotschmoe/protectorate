@@ -347,11 +347,13 @@ async function checkAuth() {
 }
 
 let sleevesCache = [];
+let hostStatsCache = null;
 
 async function refreshHostStats() {
     try {
         const resp = await fetch('/api/host/stats');
         const stats = await resp.json();
+        hostStatsCache = stats;
 
         if (stats.cpu) {
             const cpuEl = document.getElementById('host-cpu-value');
@@ -423,12 +425,33 @@ async function refreshSleeves() {
             const uptime = formatDuration(Date.now() - new Date(s.spawn_time).getTime());
             const integrity = s.integrity !== undefined ? s.integrity.toFixed(1) : 100;
 
-            let memUsed = 0, memTotal = 0, memPct = 0, cpuPct = 0;
+            const constrained = s.constrained;
+            const constraintLabel = constrained ? 'CONSTRAINED' : 'UNCONSTRAINED';
+            const constraintClass = constrained ? 'constrained' : 'unconstrained';
+
+            let memUsed = 0, memDisplay = '', memPct = 0, cpuPct = 0, cpuDisplay = '';
+
             if (s.resources) {
-                memUsed = (s.resources.memory_used_bytes / (1024 * 1024 * 1024)).toFixed(1);
-                memTotal = (s.resources.memory_limit_bytes / (1024 * 1024 * 1024)).toFixed(1);
-                memPct = Math.round(s.resources.memory_percent || 0);
+                const memUsedBytes = s.resources.memory_used_bytes || 0;
+                memUsed = (memUsedBytes / (1024 * 1024 * 1024)).toFixed(1);
+
+                if (constrained && s.memory_limit_mb > 0) {
+                    const memLimitGB = (s.memory_limit_mb / 1024).toFixed(1);
+                    memPct = Math.round(s.resources.memory_percent || 0);
+                    memDisplay = `${memUsed} / ${memLimitGB} GB`;
+                } else {
+                    memDisplay = `${memUsed} GB of host`;
+                    if (hostStatsCache && hostStatsCache.memory && hostStatsCache.memory.total_bytes > 0) {
+                        memPct = Math.round((memUsedBytes / hostStatsCache.memory.total_bytes) * 100);
+                    }
+                }
+
                 cpuPct = Math.round(s.resources.cpu_percent || 0);
+                if (constrained && s.cpu_limit > 0) {
+                    cpuDisplay = `${cpuPct}% of ${s.cpu_limit} cores`;
+                } else {
+                    cpuDisplay = `${cpuPct}% of host`;
+                }
             }
 
             const healthClass = integrity >= 80 ? 'healthy' : integrity >= 50 ? 'warning' : 'critical';
@@ -452,6 +475,10 @@ async function refreshSleeves() {
                         <span class="sleeve-label">Uptime</span>
                         <span class="sleeve-value">${uptime}</span>
                     </div>
+                    <div class="sleeve-row">
+                        <span class="sleeve-label">Resources</span>
+                        <span class="sleeve-value ${constraintClass}">${constraintLabel}</span>
+                    </div>
 
                     <div class="integrity-bar">
                         <div class="integrity-label">
@@ -467,7 +494,7 @@ async function refreshSleeves() {
                         <div class="resource">
                             <div class="resource-header">
                                 <span class="resource-label">MEMORY</span>
-                                <span class="resource-value">${memUsed} / ${memTotal} GB</span>
+                                <span class="resource-value">${memDisplay}</span>
                             </div>
                             <div class="resource-bar">
                                 <div class="resource-fill" style="width: ${memPct}%"></div>
@@ -476,7 +503,7 @@ async function refreshSleeves() {
                         <div class="resource">
                             <div class="resource-header">
                                 <span class="resource-label">CPU</span>
-                                <span class="resource-value">${cpuPct}%</span>
+                                <span class="resource-value">${cpuDisplay}</span>
                             </div>
                             <div class="resource-bar">
                                 <div class="resource-fill" style="width: ${cpuPct}%"></div>
@@ -1052,9 +1079,51 @@ function toggleWorkspaceMode() {
     }
 }
 
+let hostLimitsCache = null;
+
+async function loadHostLimits() {
+    try {
+        const resp = await fetch('/api/host/limits');
+        hostLimitsCache = await resp.json();
+
+        const memSelect = document.getElementById('memory-limit-select');
+        const cpuSelect = document.getElementById('cpu-limit-select');
+
+        memSelect.innerHTML = '<option value="0">Unlimited</option>';
+        if (hostLimitsCache.memory_options) {
+            hostLimitsCache.memory_options.forEach(mb => {
+                const gb = (mb / 1024).toFixed(1);
+                memSelect.innerHTML += `<option value="${mb}">${gb} GB</option>`;
+            });
+        }
+
+        cpuSelect.innerHTML = '<option value="0">Unlimited</option>';
+        if (hostLimitsCache.cpu_options) {
+            hostLimitsCache.cpu_options.forEach(cpu => {
+                cpuSelect.innerHTML += `<option value="${cpu}">${cpu} cores</option>`;
+            });
+        }
+    } catch (e) {
+        console.error('Failed to load host limits:', e);
+    }
+}
+
+function toggleAdvancedOptions() {
+    const advanced = document.getElementById('advanced-options');
+    const toggle = document.getElementById('advanced-toggle');
+    if (toggle.checked) {
+        advanced.classList.remove('hidden');
+        loadHostLimits();
+    } else {
+        advanced.classList.add('hidden');
+    }
+}
+
 async function showSpawnModal() {
     await refreshWorkspaces();
     toggleWorkspaceMode();
+    document.getElementById('advanced-toggle').checked = false;
+    document.getElementById('advanced-options').classList.add('hidden');
     document.getElementById('spawn-modal').classList.add('active');
 }
 
@@ -1204,6 +1273,14 @@ async function spawnSleeve(e) {
 
         showSpawnLoading('Spawning sleeve...');
         const body = { workspace, name: name || undefined };
+
+        if (document.getElementById('advanced-toggle').checked) {
+            const memLimit = parseInt(document.getElementById('memory-limit-select').value);
+            const cpuLimit = parseInt(document.getElementById('cpu-limit-select').value);
+            if (memLimit > 0) body.memory_limit_mb = memLimit;
+            if (cpuLimit > 0) body.cpu_limit = cpuLimit;
+        }
+
         const resp = await fetch('/api/sleeves', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

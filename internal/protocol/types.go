@@ -10,6 +10,9 @@ type SleeveInfo struct {
 	Workspace     string                  `json:"workspace"`
 	SpawnTime     time.Time               `json:"spawn_time"`
 	Status        string                  `json:"status"`
+	Constrained   bool                    `json:"constrained"`
+	MemoryLimitMB int64                   `json:"memory_limit_mb,omitempty"`
+	CPULimit      int                     `json:"cpu_limit,omitempty"`
 	Integrity     float64                 `json:"integrity"`
 	Resources     *ContainerResourceStats `json:"resources,omitempty"`
 }
@@ -60,8 +63,10 @@ type DockerStats struct {
 
 // SpawnSleeveRequest is the request body for spawning a new sleeve
 type SpawnSleeveRequest struct {
-	Workspace string `json:"workspace"`
-	Name      string `json:"name,omitempty"`
+	Workspace      string `json:"workspace"`
+	Name           string `json:"name,omitempty"`
+	MemoryLimitMB  int64  `json:"memory_limit_mb,omitempty"`
+	CPULimit       int    `json:"cpu_limit,omitempty"`
 }
 
 // CloneWorkspaceRequest is the request body for cloning a git repo into a workspace

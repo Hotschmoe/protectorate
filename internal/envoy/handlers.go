@@ -63,6 +63,49 @@ func (s *Server) handleHostStats(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(stats)
 }
 
+func (s *Server) handleHostLimits(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	memStats := s.hostStats.GetMemoryStats()
+	cpuStats := s.hostStats.GetCPUStats()
+
+	var totalMemoryMB int64
+	var totalCPU int
+	if memStats != nil {
+		totalMemoryMB = int64(memStats.TotalBytes / (1024 * 1024))
+	}
+	if cpuStats != nil {
+		totalCPU = cpuStats.Threads
+	}
+
+	memOptions := []int64{}
+	for _, div := range []int64{8, 4, 2, 1} {
+		opt := totalMemoryMB / div
+		if opt >= 1024 {
+			memOptions = append(memOptions, opt)
+		}
+	}
+
+	cpuOptions := []int{}
+	for _, div := range []int{8, 4, 2, 1} {
+		opt := totalCPU / div
+		if opt >= 1 {
+			cpuOptions = append(cpuOptions, opt)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"total_memory_mb": totalMemoryMB,
+		"total_cpu":       totalCPU,
+		"memory_options":  memOptions,
+		"cpu_options":     cpuOptions,
+	})
+}
+
 func (s *Server) handleSleeves(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:

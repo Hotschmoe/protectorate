@@ -334,6 +334,14 @@ body {
     color: var(--text-secondary);
 }
 
+.constrained {
+    color: var(--amber-glow);
+}
+
+.unconstrained {
+    color: var(--text-secondary);
+}
+
 .sleeve-body {
     padding: 1.25rem;
 }
