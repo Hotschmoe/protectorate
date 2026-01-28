@@ -2,16 +2,16 @@
 
 Container-native AI agent orchestration system written in Go.
 
-Named after the interstellar governing body in Altered Carbon: containers are "sleeves" (bodies), AI tools are the consciousness, and Protectorate manages them all.
+Named after the interstellar governing body in Altered Carbon: containers are "sleeves" (bodies), AI tools are the consciousness (DHF), and Protectorate manages them all.
 
 ## TLDR
 
-Protectorate spawns a manager container called **Envoy** that orchestrates AI agent containers called **Sleeves**. Each sleeve runs an AI CLI (Claude, Gemini, Codex, etc.) to work on tasks. Sleeves operate in workspaces where:
+Protectorate spawns a manager container called **Envoy** that orchestrates AI agent containers called **Sleeves**. Each sleeve runs an AI CLI (Claude Code, Gemini CLI, etc.) with a lightweight **Sidecar** that reports status back to Envoy.
+
+Sleeves operate in workspaces where:
 
 - **Cortical Stack** (`.cstack/`) - Long-term memory that persists across sessions
-- **Needlecast** (`/needlecast/`) - Inter-agent communication system
-
-When an agent gets stuck or needs a different approach, Envoy can **resleeve** the container to a different AI (swap Gemini for Claude) while keeping the cortical stack intact - memories and task context persist across the transition.
+- **Needlecast** (`/needlecast/`) - Inter-agent communication system (planned)
 
 ## Philosophy
 
@@ -26,9 +26,9 @@ WE DO:     Orchestrate dozens of them with shared memory and coordination
                     +------------------------+
                     |        ENVOY           |
                     |    (Manager Process)   |
+                    |  - Web UI + CLI        |
                     |  - Spawns sleeves      |
-                    |  - Routes messages     |
-                    |  - Health monitoring   |
+                    |  - Polls sidecars      |
                     +----------+-------------+
                                |
          +---------------------+---------------------+
@@ -37,6 +37,7 @@ WE DO:     Orchestrate dozens of them with shared memory and coordination
   +---------------+     +---------------+     +---------------+
   | Sleeve Alice  |     | Sleeve Bob    |     | Sleeve Carol  |
   | Claude Code   |     | Gemini CLI    |     | OpenCode      |
+  | Sidecar:8080  |     | Sidecar:8080  |     | Sidecar:8080  |
   | .cstack/      |     | .cstack/      |     | .cstack/      |
   +---------------+     +---------------+     +---------------+
 ```
@@ -45,9 +46,9 @@ WE DO:     Orchestrate dozens of them with shared memory and coordination
 
 | Component | Description |
 |-----------|-------------|
-| Envoy | Manager container with Docker socket access, spawns/kills sleeves, routes messages |
+| Envoy | Manager container with Docker socket access, web UI, CLI, spawns/kills sleeves |
 | Sleeve | Agent container with AI CLI, sidecar, and mounted workspace |
-| Sidecar | Lightweight HTTP server exposing /health, /status, /outbox endpoints |
+| Sidecar | Lightweight HTTP server inside each sleeve exposing /health and /status |
 
 ## Installation
 
@@ -138,28 +139,40 @@ make down          # Stop services
 
 ## API
 
-**Envoy Manager (port 7470)**
+**Envoy (port 7470)**
 ```
-GET  /sleeves               List all sleeves
-POST /sleeves               Spawn new sleeve
-DELETE /sleeves/{id}        Kill sleeve
-POST /sleeves/{id}/resleeve Soft or hard resleeve
+GET    /api/sleeves              List all sleeves (with sidecar status)
+POST   /api/sleeves              Spawn new sleeve
+GET    /api/sleeves/{name}       Get sleeve details
+DELETE /api/sleeves/{name}       Kill sleeve
+GET    /api/workspaces           List workspaces
+POST   /api/workspaces/clone     Clone git repository
+GET    /api/doctor               System health checks
+GET    /api/host/stats           CPU, memory, disk stats
+GET    /sleeves/{name}/terminal  WebSocket terminal access
 ```
 
-**Sidecar (port 8080)**
+**Sidecar (port 8080, internal to raven network)**
 ```
-GET  /health    Health check
-GET  /status    Sleeve status from .cstack/
-GET  /outbox    Read outbox messages
+GET  /health    Returns {"status": "ok"}
+GET  /status    DHF info, cstack stats, process info, auth status
 ```
+
+Envoy polls sidecars internally - the web UI only hits Envoy endpoints.
 
 ## CLI
 
 ```bash
-envoy spawn --repo foo --cli claude-code    # Spawn sleeve
-envoy status                                 # List sleeves
-envoy resleeve agent-alice --cli gemini     # Swap CLI
-envoy kill agent-bob                         # Kill sleeve
+envoy serve                          # Start the daemon (default)
+envoy status [--json]                # List sleeves
+envoy spawn /workspaces/myproject    # Spawn sleeve on workspace
+envoy spawn /workspaces/foo --name alice --memory 4096
+envoy kill alice                     # Kill sleeve
+envoy info alice                     # Detailed sleeve info
+envoy doctor [--json]                # System diagnostics
+envoy workspaces [--json]            # List workspaces
+envoy clone https://github.com/user/repo
+envoy stats [--json]                 # Host resource stats
 ```
 
 ## Related

@@ -158,27 +158,43 @@ golangci-lint run        # Run linter (if configured)
 
 - **Envoy** (`cmd/envoy/`, `internal/envoy/`): Central coordinator running as a container with Docker socket access. Spawns/kills sleeves, performs hourly check-ins, routes inter-sleeve messages, and manages lifecycle.
 
-- **Sidecar** (`cmd/sidecar/`, `internal/sidecar/`): Lightweight HTTP server baked into every sleeve. Exposes `/health`, `/status`, `/outbox`, `/resleeve` endpoints. Parses `.cstack/` files to report sleeve state.
+- **Sidecar** (`cmd/sidecar/`, `internal/sidecar/`): Lightweight HTTP server baked into every sleeve. Exposes `/health` and `/status` endpoints. Reports DHF info, cstack stats, process info, and auth status back to Envoy.
 
 - **Sleeves** (`containers/sleeve/`): Docker containers running AI CLIs (Claude Code, Gemini CLI, OpenCode, etc.) with the sidecar. Contains base OS, AI CLI tool, sidecar binary, and mounted workspace with `.cstack/`.
 
 ### Shared Libraries (`internal/`)
 
-- `protocol/`: Shared types (SleeveStatus, Message, SpawnRequest, ResleeveRequest)
+- `protocol/`: Shared types (SleeveInfo, WorkspaceInfo, CstackStats, etc.)
 - `config/`: YAML configuration loading with environment variable substitution
+- `sidecar/`: Sidecar HTTP server, DHF detection, cstack parsing, caching
 
 ### Project Structure
 
 ```
 protectorate/
 ├── cmd/
-│   ├── envoy/main.go              # Envoy entry point
+│   ├── envoy/                     # Envoy CLI entry point
+│   │   ├── main.go                # CLI setup
+│   │   ├── cmd_serve.go           # serve command (starts daemon)
+│   │   ├── cmd_sleeves.go         # status, spawn, kill, info
+│   │   ├── cmd_workspaces.go      # workspaces, clone, branches
+│   │   └── client.go              # HTTP client for envoy server
 │   └── sidecar/main.go            # Sidecar entry point
 ├── internal/
 │   ├── config/                    # YAML config loading
 │   ├── envoy/                     # Envoy server, handlers, Docker client
+│   │   ├── server.go              # HTTP server setup
+│   │   ├── handlers.go            # API endpoint handlers
+│   │   ├── sidecar_client.go      # HTTP client for sidecars
+│   │   ├── sleeve_manager.go      # Sleeve lifecycle
+│   │   ├── workspace_manager.go   # Workspace operations
 │   │   ├── web/templates/         # Webui HTML (hot-reload in dev)
-│   │   └── web/static/            # Static assets
+│   │   └── web/static/            # Static assets (CSS/JS)
+│   ├── sidecar/                   # Sidecar HTTP server
+│   │   ├── server.go              # /health, /status endpoints
+│   │   ├── dhf.go                 # CLI detection (claude, gemini, etc.)
+│   │   ├── cstack.go              # Cortical stack stats
+│   │   └── cache.go               # Generic TTL cache
 │   └── protocol/                  # Shared types
 ├── containers/
 │   ├── base/Dockerfile            # Shared base image
