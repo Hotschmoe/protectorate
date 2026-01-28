@@ -185,51 +185,54 @@ func authCheckAction(c *cli.Context) error {
 	}
 
 	if !quiet {
-		providers := []protocol.AuthProvider{
-			protocol.AuthProviderClaude,
-			protocol.AuthProviderGemini,
-			protocol.AuthProviderCodex,
-			protocol.AuthProviderGit,
-		}
-
-		for _, provider := range providers {
-			info, ok := result.Providers[provider]
-			if !ok {
-				continue
-			}
-
-			statusIcon := "[*]"
-			switch info.Status {
-			case "expired", "missing":
-				statusIcon = "[x]"
-			case "expiring_soon":
-				statusIcon = "[!]"
-			}
-
-			message := info.Message
-			if message == "" {
-				message = info.Status
-			}
-
-			fmt.Printf("%s %-8s %s\n", statusIcon, provider+":", message)
-		}
-
-		fmt.Println()
-		if result.Expired {
-			fmt.Println("Status: EXPIRED - credentials need renewal")
-		} else if result.ExpiringSoon {
-			fmt.Println("Status: WARNING - credentials expiring soon")
-		} else {
-			fmt.Println("Status: OK - all credentials valid")
-		}
+		printAuthCheckResult(&result)
 	}
 
-	// Return appropriate exit code
 	if result.Expired {
-		os.Exit(exitCodeExpired)
-	} else if result.ExpiringSoon {
-		os.Exit(exitCodeExpiringSoon)
+		return cli.Exit("", exitCodeExpired)
+	}
+	if result.ExpiringSoon {
+		return cli.Exit("", exitCodeExpiringSoon)
+	}
+	return nil
+}
+
+func printAuthCheckResult(result *protocol.AuthCheckResult) {
+	providers := []protocol.AuthProvider{
+		protocol.AuthProviderClaude,
+		protocol.AuthProviderGemini,
+		protocol.AuthProviderCodex,
+		protocol.AuthProviderGit,
 	}
 
-	return nil
+	for _, provider := range providers {
+		info, ok := result.Providers[provider]
+		if !ok {
+			continue
+		}
+
+		icon := "[*]"
+		switch info.Status {
+		case "expired", "missing":
+			icon = "[x]"
+		case "expiring_soon":
+			icon = "[!]"
+		}
+
+		message := info.Message
+		if message == "" {
+			message = info.Status
+		}
+		fmt.Printf("%s %-8s %s\n", icon, provider+":", message)
+	}
+
+	fmt.Println()
+	switch {
+	case result.Expired:
+		fmt.Println("Status: EXPIRED - credentials need renewal")
+	case result.ExpiringSoon:
+		fmt.Println("Status: WARNING - credentials expiring soon")
+	default:
+		fmt.Println("Status: OK - all credentials valid")
+	}
 }

@@ -125,71 +125,63 @@ func (m *AuthManager) Check() *protocol.AuthCheckResult {
 	now := time.Now()
 
 	for provider, providerStatus := range status.Providers {
-		info := &protocol.AuthCheckInfo{}
-
-		if !providerStatus.Authenticated {
-			info.Status = "missing"
-			info.Message = "not authenticated"
+		info := m.checkProvider(provider, providerStatus, now)
+		if info.Status == "missing" || info.Status == "expired" {
 			result.Valid = false
 			result.Expired = true
-		} else {
-			// Check expiration from state
-			if stateInfo, ok := m.state.Providers[string(provider)]; ok && !stateInfo.ExpiresAt.IsZero() {
-				if now.After(stateInfo.ExpiresAt) {
-					info.Status = "expired"
-					info.ExpiresAt = stateInfo.ExpiresAt
-					info.Message = "credentials have expired"
-					result.Valid = false
-					result.Expired = true
-				} else if stateInfo.ExpiresAt.Sub(now) <= warnThreshold {
-					info.Status = "expiring_soon"
-					info.ExpiresAt = stateInfo.ExpiresAt
-					info.ExpiresIn = formatDuration(stateInfo.ExpiresAt.Sub(now))
-					info.Message = fmt.Sprintf("expires in %s", info.ExpiresIn)
-					result.ExpiringSoon = true
-				} else {
-					info.Status = "valid"
-					info.ExpiresAt = stateInfo.ExpiresAt
-					info.ExpiresIn = formatDuration(stateInfo.ExpiresAt.Sub(now))
-					info.Message = fmt.Sprintf("expires in %s", info.ExpiresIn)
-				}
-			} else {
-				info.Status = "valid"
-				info.Message = "authenticated"
-			}
+		} else if info.Status == "expiring_soon" {
+			result.ExpiringSoon = true
 		}
-
 		result.Providers[provider] = info
 	}
 
 	return result
 }
 
-func formatDuration(d time.Duration) string {
-	if d < time.Hour {
-		return fmt.Sprintf("%d minutes", int(d.Minutes()))
+func (m *AuthManager) checkProvider(provider protocol.AuthProvider, providerStatus *protocol.ProviderAuthStatus, now time.Time) *protocol.AuthCheckInfo {
+	if !providerStatus.Authenticated {
+		return &protocol.AuthCheckInfo{Status: "missing", Message: "not authenticated"}
 	}
-	if d < 24*time.Hour {
-		return fmt.Sprintf("%d hours", int(d.Hours()))
+
+	stateInfo, hasState := m.state.Providers[string(provider)]
+	if !hasState || stateInfo.ExpiresAt.IsZero() {
+		return &protocol.AuthCheckInfo{Status: "valid", Message: "authenticated"}
 	}
-	days := int(d.Hours() / 24)
-	if days == 1 {
-		return "1 day"
+
+	timeLeft := stateInfo.ExpiresAt.Sub(now)
+	info := &protocol.AuthCheckInfo{ExpiresAt: stateInfo.ExpiresAt}
+
+	if timeLeft <= 0 {
+		info.Status = "expired"
+		info.Message = "credentials have expired"
+	} else if timeLeft <= warnThreshold {
+		info.Status = "expiring_soon"
+		info.ExpiresIn = formatDuration(timeLeft)
+		info.Message = fmt.Sprintf("expires in %s", info.ExpiresIn)
+	} else {
+		info.Status = "valid"
+		info.ExpiresIn = formatDuration(timeLeft)
+		info.Message = fmt.Sprintf("expires in %s", info.ExpiresIn)
 	}
-	return fmt.Sprintf("%d days", days)
+
+	return info
 }
 
-// GetExpirationStatus returns expiration info for a single provider
-func (m *AuthManager) GetExpirationStatus(provider protocol.AuthProvider) *protocol.AuthCheckInfo {
-	result := m.Check()
-	if info, ok := result.Providers[provider]; ok {
-		return info
-	}
-	return &protocol.AuthCheckInfo{
-		Status:  "missing",
-		Message: "provider not found",
+func formatDuration(d time.Duration) string {
+	switch {
+	case d < time.Hour:
+		return fmt.Sprintf("%d minutes", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%d hours", int(d.Hours()))
+	default:
+		days := int(d.Hours() / 24)
+		if days == 1 {
+			return "1 day"
+		}
+		return fmt.Sprintf("%d days", days)
 	}
 }
+
 
 // StartupCheck performs a non-blocking startup validation and logs warnings
 func (m *AuthManager) StartupCheck() {
