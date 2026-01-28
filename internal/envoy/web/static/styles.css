@@ -356,6 +356,174 @@ body {
     font-weight: 600;
 }
 
+/* Integrity Bar */
+.integrity-bar {
+    margin: 1rem 0;
+}
+
+.integrity-label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    font-size: var(--text-sm);
+}
+
+.integrity-track {
+    height: 8px;
+    background: var(--bg-deep);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.integrity-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--cyan-dim), var(--cyan-glow));
+    border-radius: 4px;
+    transition: width 0.3s;
+}
+
+.integrity-fill.warning {
+    background: linear-gradient(90deg, var(--amber-dim), var(--amber-glow));
+}
+
+.integrity-fill.critical {
+    background: linear-gradient(90deg, var(--magenta-dim), var(--magenta-glow));
+}
+
+/* Resource Meters */
+.resource-row {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+.resource {
+    flex: 1;
+}
+
+.resource-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--text-xs);
+    margin-bottom: 0.25rem;
+}
+
+.resource-label {
+    color: var(--text-muted);
+}
+
+.resource-value {
+    color: var(--text-secondary);
+}
+
+.resource-bar {
+    height: 4px;
+    background: var(--bg-deep);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.resource-fill {
+    height: 100%;
+    background: var(--cyan-dim);
+    transition: width 0.3s;
+}
+
+.resource-fill.warning {
+    background: var(--amber-dim);
+}
+
+.resource-fill.critical {
+    background: var(--magenta-dim);
+}
+
+/* Host Resources Panel */
+.host-resources {
+    background: var(--bg-surface);
+    border: 1px solid var(--cyan-subtle);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.host-resources-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.host-resources-title {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.host-resources-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.host-resource {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.host-resource-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.host-resource-label {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.host-resource-value {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--cyan-glow);
+}
+
+.host-resource-value.warning {
+    color: var(--amber-glow);
+}
+
+.host-resource-value.critical {
+    color: var(--magenta-glow);
+}
+
+.host-resource-bar {
+    height: 6px;
+    background: var(--bg-deep);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.host-resource-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--cyan-dim), var(--cyan-glow));
+    transition: width 0.3s;
+}
+
+.host-resource-fill.warning {
+    background: linear-gradient(90deg, var(--amber-dim), var(--amber-glow));
+}
+
+.host-resource-fill.critical {
+    background: linear-gradient(90deg, var(--magenta-dim), var(--magenta-glow));
+}
+
+.host-resource-detail {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
 .sleeve-actions {
     padding: 1rem 1.25rem;
     border-top: 1px solid var(--cyan-subtle);

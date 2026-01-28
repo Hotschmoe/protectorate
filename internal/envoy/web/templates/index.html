@@ -44,6 +44,56 @@
                     <button class="btn btn-primary" onclick="showSpawnModal()">+ SPAWN SLEEVE</button>
                 </div>
             </div>
+
+            <!-- Host Resources -->
+            <div class="host-resources">
+                <div class="host-resources-header">
+                    <span class="host-resources-title">Host Resources</span>
+                </div>
+                <div class="host-resources-grid">
+                    <div class="host-resource">
+                        <div class="host-resource-header">
+                            <span class="host-resource-label">CPU</span>
+                            <span class="host-resource-value">34%</span>
+                        </div>
+                        <div class="host-resource-bar">
+                            <div class="host-resource-fill" style="width: 34%"></div>
+                        </div>
+                        <span class="host-resource-detail">8 cores / 16 threads</span>
+                    </div>
+                    <div class="host-resource">
+                        <div class="host-resource-header">
+                            <span class="host-resource-label">Memory</span>
+                            <span class="host-resource-value">12.4 GB</span>
+                        </div>
+                        <div class="host-resource-bar">
+                            <div class="host-resource-fill" style="width: 39%"></div>
+                        </div>
+                        <span class="host-resource-detail">12.4 / 32.0 GB used</span>
+                    </div>
+                    <div class="host-resource">
+                        <div class="host-resource-header">
+                            <span class="host-resource-label">Disk</span>
+                            <span class="host-resource-value">156 GB</span>
+                        </div>
+                        <div class="host-resource-bar">
+                            <div class="host-resource-fill" style="width: 31%"></div>
+                        </div>
+                        <span class="host-resource-detail">156 / 500 GB used</span>
+                    </div>
+                    <div class="host-resource">
+                        <div class="host-resource-header">
+                            <span class="host-resource-label">Docker</span>
+                            <span class="host-resource-value">3</span>
+                        </div>
+                        <div class="host-resource-bar">
+                            <div class="host-resource-fill" style="width: 15%"></div>
+                        </div>
+                        <span class="host-resource-detail">3 containers / 20 limit</span>
+                    </div>
+                </div>
+            </div>
+
             <div id="sleeves-grid" class="sleeve-grid">
                 <div class="empty-state">No sleeves running. Click "+ SPAWN SLEEVE" to create one.</div>
             </div>

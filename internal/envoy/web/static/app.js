@@ -331,6 +331,12 @@ async function checkAuth() {
 
 let sleevesCache = [];
 
+function getWorkspaceName(workspacePath) {
+    if (!workspacePath) return 'unknown';
+    const parts = workspacePath.split('/');
+    return parts[parts.length - 1] || workspacePath;
+}
+
 async function refreshSleeves() {
     try {
         const resp = await fetch('/api/sleeves');
@@ -346,7 +352,17 @@ async function refreshSleeves() {
             return;
         }
 
-        grid.innerHTML = sleeves.map(s => `
+        grid.innerHTML = sleeves.map(s => {
+            const wsName = getWorkspaceName(s.workspace);
+            // Static placeholder values for now
+            const uptime = '00:15:42';
+            const integrity = 98.7;
+            const memUsed = 2.1;
+            const memTotal = 4.0;
+            const memPct = Math.round((memUsed / memTotal) * 100);
+            const cpuPct = 23;
+
+            return `
             <div class="sleeve-card healthy">
                 <div class="sleeve-header">
                     <span class="sleeve-name">SLEEVE: ${escapeHtml(s.name)}</span>
@@ -359,11 +375,42 @@ async function refreshSleeves() {
                     </div>
                     <div class="sleeve-row">
                         <span class="sleeve-label">Workspace</span>
-                        <span class="sleeve-value">${escapeHtml(s.workspace)}</span>
+                        <span class="sleeve-value">${escapeHtml(wsName)}</span>
                     </div>
                     <div class="sleeve-row">
-                        <span class="sleeve-label">Container</span>
-                        <span class="sleeve-value" style="font-size: var(--text-sm); color: var(--text-secondary);">${escapeHtml(s.container_id)}</span>
+                        <span class="sleeve-label">Uptime</span>
+                        <span class="sleeve-value">${uptime}</span>
+                    </div>
+
+                    <div class="integrity-bar">
+                        <div class="integrity-label">
+                            <span class="sleeve-label">Stack Integrity</span>
+                            <span class="sleeve-value">${integrity}%</span>
+                        </div>
+                        <div class="integrity-track">
+                            <div class="integrity-fill" style="width: ${integrity}%"></div>
+                        </div>
+                    </div>
+
+                    <div class="resource-row">
+                        <div class="resource">
+                            <div class="resource-header">
+                                <span class="resource-label">MEMORY</span>
+                                <span class="resource-value">${memUsed} / ${memTotal} GB</span>
+                            </div>
+                            <div class="resource-bar">
+                                <div class="resource-fill" style="width: ${memPct}%"></div>
+                            </div>
+                        </div>
+                        <div class="resource">
+                            <div class="resource-header">
+                                <span class="resource-label">CPU</span>
+                                <span class="resource-value">${cpuPct}%</span>
+                            </div>
+                            <div class="resource-bar">
+                                <div class="resource-fill" style="width: ${cpuPct}%"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="sleeve-actions">
@@ -372,7 +419,7 @@ async function refreshSleeves() {
                     <button class="btn btn-danger" onclick="killSleeve('${escapeHtml(s.name)}')">KILL</button>
                 </div>
             </div>
-        `).join('');
+        `}).join('');
 
         updateNeedlecastSleeveList();
     } catch (e) {
