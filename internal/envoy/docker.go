@@ -1,11 +1,9 @@
 package envoy
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -14,7 +12,6 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/hotschmoe/protectorate/internal/protocol"
 )
 
@@ -297,19 +294,6 @@ var containerStatsCache = &statsCache{
 	ttl:  5 * time.Second,
 }
 
-// DHFInfo contains CLI tool name and version
-type DHFInfo struct {
-	Name    string
-	Version string
-}
-
-// dhfCache caches DHF version info (long TTL since version rarely changes)
-var dhfCache = struct {
-	mu   sync.RWMutex
-	data map[string]*DHFInfo
-}{
-	data: make(map[string]*DHFInfo),
-}
 
 // GetContainerStats returns resource stats for a container (cached for 5s)
 func (d *DockerClient) GetContainerStats(ctx context.Context, containerID string) (*protocol.ContainerResourceStats, error) {
@@ -364,92 +348,3 @@ func (d *DockerClient) GetContainerStats(ctx context.Context, containerID string
 	return result, nil
 }
 
-// GetDHFInfo returns the CLI tool name and version for a container (cached indefinitely)
-func (d *DockerClient) GetDHFInfo(ctx context.Context, containerID string) (*DHFInfo, error) {
-	dhfCache.mu.RLock()
-	if cached, ok := dhfCache.data[containerID]; ok {
-		dhfCache.mu.RUnlock()
-		return cached, nil
-	}
-	dhfCache.mu.RUnlock()
-
-	info, err := d.detectDHF(ctx, containerID)
-	if err != nil {
-		return nil, err
-	}
-
-	dhfCache.mu.Lock()
-	dhfCache.data[containerID] = info
-	dhfCache.mu.Unlock()
-
-	return info, nil
-}
-
-// detectDHF tries known CLI tools and returns the first one found with its version
-func (d *DockerClient) detectDHF(ctx context.Context, containerID string) (*DHFInfo, error) {
-	// Use full paths since PATH may not be set during exec
-	tools := []struct {
-		cmd  string
-		name string
-	}{
-		{"/home/claude/.local/bin/claude", "Claude Code"},
-		{"/usr/local/bin/gemini", "Gemini CLI"},
-		{"/usr/local/bin/codex", "Codex CLI"},
-	}
-
-	for _, tool := range tools {
-		output, err := d.execCommand(ctx, containerID, tool.cmd, "--version")
-		if err == nil && output != "" {
-			version := parseVersion(output)
-			return &DHFInfo{Name: tool.name, Version: version}, nil
-		}
-	}
-
-	return &DHFInfo{Name: "Unknown", Version: ""}, nil
-}
-
-// parseVersion extracts version number from output like "2.1.20 (Claude Code)"
-func parseVersion(output string) string {
-	// Take first word (the version number)
-	if idx := strings.Index(output, " "); idx > 0 {
-		return output[:idx]
-	}
-	return output
-}
-
-// execCommand runs a command in a container and returns the first line of stdout
-func (d *DockerClient) execCommand(ctx context.Context, containerID string, cmd ...string) (string, error) {
-	execConfig := container.ExecOptions{
-		Cmd:          cmd,
-		AttachStdout: true,
-		AttachStderr: true,
-	}
-
-	execID, err := d.cli.ContainerExecCreate(ctx, containerID, execConfig)
-	if err != nil {
-		return "", err
-	}
-
-	attachResp, err := d.cli.ContainerExecAttach(ctx, execID.ID, container.ExecStartOptions{})
-	if err != nil {
-		return "", err
-	}
-	defer attachResp.Close()
-
-	var stdout, stderr bytes.Buffer
-	_, err = stdcopy.StdCopy(&stdout, &stderr, attachResp.Reader)
-	if err != nil {
-		return "", fmt.Errorf("failed to read exec output: %w", err)
-	}
-
-	inspect, err := d.cli.ContainerExecInspect(ctx, execID.ID)
-	if err != nil {
-		return "", err
-	}
-	if inspect.ExitCode != 0 {
-		return "", fmt.Errorf("exit code %d", inspect.ExitCode)
-	}
-
-	firstLine, _, _ := strings.Cut(stdout.String(), "\n")
-	return strings.TrimSpace(firstLine), nil
-}

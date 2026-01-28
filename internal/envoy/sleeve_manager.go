@@ -286,17 +286,6 @@ func (m *SleeveManager) Get(name string) (*protocol.SleeveInfo, error) {
 	return sleeve, nil
 }
 
-// CalculateIntegrity returns stack integrity as a percentage
-// Based on (closed/total)*100 from cstack stats
-// Returns 100 if no cstack or no tasks
-func (m *SleeveManager) CalculateIntegrity(workspace string) float64 {
-	stats := getCstackInfo(workspace)
-	if stats == nil || !stats.Exists || stats.Total == 0 {
-		return 100.0
-	}
-	return float64(stats.Closed) / float64(stats.Total) * 100.0
-}
-
 func (m *SleeveManager) RecoverSleeves() error {
 	containers, err := m.docker.ListSleeveContainers()
 	if err != nil {

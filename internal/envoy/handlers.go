@@ -18,6 +18,13 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
+func calculateIntegrityFromCstack(stats *protocol.CstackStats) float64 {
+	if stats == nil || !stats.Exists || stats.Total == 0 {
+		return 100.0
+	}
+	return float64(stats.Closed) / float64(stats.Total) * 100.0
+}
+
 func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	credPath := "/home/claude/.claude/.credentials.json"
 	_, err := os.Stat(credPath)
@@ -108,16 +115,32 @@ func (s *Server) handleSleeves(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 
+		// Collect container names for batch sidecar query
+		containerNames := make([]string, 0, len(sleeves))
 		for _, sleeve := range sleeves {
-			sleeve.Integrity = s.sleeves.CalculateIntegrity(sleeve.Workspace)
+			containerNames = append(containerNames, sleeve.ContainerName)
+		}
 
-			if stats, err := s.docker.GetContainerStats(ctx, sleeve.ContainerID); err == nil {
-				sleeve.Resources = stats
+		// Fetch sidecar status in parallel
+		sidecarStatuses := s.sidecar.BatchGetStatus(containerNames)
+
+		for _, sleeve := range sleeves {
+			// Get DHF and integrity from sidecar
+			if status, ok := sidecarStatuses[sleeve.ContainerName]; ok {
+				if status.DHF != nil {
+					sleeve.DHF = status.DHF.Name
+					sleeve.DHFVersion = status.DHF.Version
+				}
+				if status.Workspace != nil && status.Workspace.Cstack != nil {
+					sleeve.Integrity = calculateIntegrityFromCstack(status.Workspace.Cstack)
+				} else {
+					sleeve.Integrity = 100.0
+				}
 			}
 
-			if dhf, err := s.docker.GetDHFInfo(ctx, sleeve.ContainerID); err == nil {
-				sleeve.DHF = dhf.Name
-				sleeve.DHFVersion = dhf.Version
+			// Container resource stats still come from Docker API
+			if stats, err := s.docker.GetContainerStats(ctx, sleeve.ContainerID); err == nil {
+				sleeve.Resources = stats
 			}
 		}
 

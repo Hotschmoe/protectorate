@@ -13,6 +13,7 @@ type Server struct {
 	cfg         *config.EnvoyConfig
 	http        *http.Server
 	docker      *DockerClient
+	sidecar     *SidecarClient
 	sleeves     *SleeveManager
 	workspaces  *WorkspaceManager
 	agentDoctor *AgentDoctorManager
@@ -29,6 +30,7 @@ func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
 	workspaces := NewWorkspaceManager(cfg, sleeves.List)
 	agentDoctor := NewAgentDoctorManager(cfg)
 	hostStats := NewHostStatsCollector(docker, 20)
+	sidecar := NewSidecarClient(cfg.Docker.Network)
 
 	if err := sleeves.RecoverSleeves(); err != nil {
 		return nil, fmt.Errorf("failed to recover sleeves: %w", err)
@@ -37,6 +39,7 @@ func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
 	s := &Server{
 		cfg:         cfg,
 		docker:      docker,
+		sidecar:     sidecar,
 		sleeves:     sleeves,
 		workspaces:  workspaces,
 		agentDoctor: agentDoctor,
