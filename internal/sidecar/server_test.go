@@ -7,13 +7,16 @@ import (
 	"testing"
 )
 
-func TestHealthEndpoint(t *testing.T) {
-	cfg := &Config{
+func testConfig() *Config {
+	return &Config{
 		Port:          8080,
 		SleeveName:    "test-sleeve",
 		WorkspacePath: "/tmp",
 	}
-	server := NewServer(cfg)
+}
+
+func TestHealthEndpoint(t *testing.T) {
+	server := NewServer(testConfig())
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
@@ -35,12 +38,7 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestHealthEndpointMethodNotAllowed(t *testing.T) {
-	cfg := &Config{
-		Port:          8080,
-		SleeveName:    "test-sleeve",
-		WorkspacePath: "/tmp",
-	}
-	server := NewServer(cfg)
+	server := NewServer(testConfig())
 
 	req := httptest.NewRequest(http.MethodPost, "/health", nil)
 	w := httptest.NewRecorder()
@@ -53,12 +51,7 @@ func TestHealthEndpointMethodNotAllowed(t *testing.T) {
 }
 
 func TestStatusEndpoint(t *testing.T) {
-	cfg := &Config{
-		Port:          8080,
-		SleeveName:    "test-sleeve",
-		WorkspacePath: "/tmp",
-	}
-	server := NewServer(cfg)
+	server := NewServer(testConfig())
 
 	req := httptest.NewRequest(http.MethodGet, "/status", nil)
 	w := httptest.NewRecorder()

@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sync"
 	"time"
 )
 
@@ -23,42 +22,19 @@ type CstackStats struct {
 // CstackChecker checks cstack status with caching
 type CstackChecker struct {
 	workspacePath string
-	cacheTTL      time.Duration
-
-	mu         sync.RWMutex
-	cached     *CstackStats
-	cachedAt   time.Time
+	cache         *CachedValue[*CstackStats]
 }
 
 // NewCstackChecker creates a new cstack checker
 func NewCstackChecker(workspacePath string) *CstackChecker {
-	return &CstackChecker{
-		workspacePath: workspacePath,
-		cacheTTL:      5 * time.Second,
-	}
+	c := &CstackChecker{workspacePath: workspacePath}
+	c.cache = NewCachedValue(5*time.Second, c.fetch)
+	return c
 }
 
 // Stats returns cstack statistics, using cache if fresh
 func (c *CstackChecker) Stats() *CstackStats {
-	c.mu.RLock()
-	if c.cached != nil && time.Since(c.cachedAt) < c.cacheTTL {
-		stats := c.cached
-		c.mu.RUnlock()
-		return stats
-	}
-	c.mu.RUnlock()
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Double-check after acquiring write lock
-	if c.cached != nil && time.Since(c.cachedAt) < c.cacheTTL {
-		return c.cached
-	}
-
-	c.cached = c.fetch()
-	c.cachedAt = time.Now()
-	return c.cached
+	return c.cache.Get()
 }
 
 func (c *CstackChecker) fetch() *CstackStats {
