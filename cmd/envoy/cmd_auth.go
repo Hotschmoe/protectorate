@@ -22,24 +22,19 @@ var authCommand = &cli.Command{
 		{
 			Name:      "login",
 			Usage:     "Login to a provider",
-			ArgsUsage: "<provider>",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    "token",
-					Aliases: []string{"t"},
-					Usage:   "Authentication token or API key",
-				},
-			},
+			ArgsUsage: "<provider> <token>",
 			Action: func(c *cli.Context) error {
-				if c.NArg() < 1 {
-					return cli.Exit("usage: envoy auth login <provider> [--token TOKEN]", 1)
+				if c.NArg() < 2 {
+					return cli.Exit("usage: envoy auth login <provider> <token>", 1)
 				}
+
+				provider := c.Args().Get(0)
+				token := c.Args().Get(1)
 
 				client := NewEnvoyClient(c.String("server"))
 				out := NewOutputWriter(c.Bool("json"), os.Stdout)
 
-				provider := c.Args().First()
-				body := map[string]string{"token": c.String("token")}
+				body := map[string]string{"token": token}
 
 				var result protocol.AuthLoginResult
 				if err := client.Post("/api/auth/"+provider+"/login", body, &result); err != nil {

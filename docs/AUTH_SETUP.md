@@ -78,7 +78,7 @@ claude setup-token
 **Step 2: Store in Protectorate**
 ```bash
 # In envoy container or via CLI
-docker exec envoy envoy auth login claude --token "<paste-token-here>"
+docker exec envoy envoy auth login claude "<paste-token-here>"
 ```
 
 **Step 3: Verify**
@@ -105,7 +105,7 @@ For Gemini, API keys are simpler and don't expire.
 
 **Step 2: Store in Protectorate**
 ```bash
-docker exec envoy envoy auth login gemini --token "<api-key>"
+docker exec envoy envoy auth login gemini "<api-key>"
 ```
 
 **Alternative: OAuth flow** (for Google Workspace accounts)
@@ -302,9 +302,9 @@ envoy auth
 envoy auth status
 
 # Login to provider
-envoy auth login <provider> --token <token>
-envoy auth login claude --token "sk-ant-..."
-envoy auth login gemini --token "AIza..."
+envoy auth login <provider> <token>
+envoy auth login claude "sk-ant-..."
+envoy auth login gemini "AIza..."
 
 # Revoke credentials
 envoy auth revoke <provider>
