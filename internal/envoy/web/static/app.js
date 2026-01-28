@@ -440,6 +440,33 @@ function formatSleeveResources(sleeve) {
     return { memDisplay, memPct, cpuDisplay, cpuPct };
 }
 
+function renderSpawningCard(pending) {
+    const wsName = getWorkspaceName(pending.workspace);
+    const displayName = pending.name || 'allocating...';
+    return `
+    <div class="sleeve-card spawning">
+        <div class="sleeve-header">
+            <span class="sleeve-name">SLEEVE: ${escapeHtml(displayName)}</span>
+            <span class="sleeve-status spawning">SPAWNING</span>
+        </div>
+        <div class="sleeve-body">
+            <div class="sleeve-row">
+                <span class="sleeve-label">DHF</span>
+                <span class="sleeve-value">Claude Code</span>
+            </div>
+            <div class="sleeve-row">
+                <span class="sleeve-label">Workspace</span>
+                <span class="sleeve-value">${escapeHtml(wsName)}</span>
+            </div>
+            <div class="spawning-indicator">
+                <span class="inline-spinner"></span>
+                <span class="spawning-text">${escapeHtml(pending.message || 'Spawning sleeve...')}</span>
+            </div>
+        </div>
+    </div>
+    `;
+}
+
 async function refreshSleeves() {
     try {
         const resp = await fetch('/api/sleeves');
@@ -450,12 +477,16 @@ async function refreshSleeves() {
 
         statActive.textContent = sleeves.length;
 
-        if (sleeves.length === 0) {
+        const hasPending = pendingSpawns.length > 0;
+        const hasActive = sleeves.length > 0;
+
+        if (!hasActive && !hasPending) {
             grid.innerHTML = '<div class="empty-state">No sleeves running. Click "+ SPAWN SLEEVE" to create one.</div>';
             return;
         }
 
-        grid.innerHTML = sleeves.map(s => {
+        const pendingCards = pendingSpawns.map(p => renderSpawningCard(p)).join('');
+        const activeCards = sleeves.map(s => {
             const wsName = getWorkspaceName(s.workspace);
             const uptime = formatDuration(Date.now() - new Date(s.spawn_time).getTime());
             const integrity = s.integrity !== undefined ? s.integrity.toFixed(1) : 100;
@@ -537,6 +568,8 @@ async function refreshSleeves() {
             </div>
         `}).join('');
 
+        grid.innerHTML = pendingCards + activeCards;
+
         updateNeedlecastSleeveList();
     } catch (e) {
         console.error('Failed to fetch sleeves:', e);
@@ -552,6 +585,7 @@ function updateNeedlecastSleeveList() {
 }
 
 let workspacesCache = [];
+let pendingSpawns = [];
 
 async function refreshWorkspaces() {
     try {
@@ -1289,7 +1323,6 @@ async function spawnSleeve(e) {
             }
         }
 
-        showSpawnLoading('Spawning sleeve...');
         const body = { workspace, name: name || undefined };
 
         if (document.getElementById('advanced-toggle').checked) {
@@ -1299,26 +1332,41 @@ async function spawnSleeve(e) {
             if (cpuLimit > 0) body.cpu_limit = cpuLimit;
         }
 
+        const pendingId = Date.now().toString();
+        const pending = {
+            id: pendingId,
+            workspace: workspace,
+            name: name || null,
+            message: 'Spawning sleeve...'
+        };
+        pendingSpawns.push(pending);
+
+        hideSpawnLoading();
+        hideSpawnModal();
+        refreshSleeves();
+
         const resp = await fetch('/api/sleeves', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
         });
 
+        pendingSpawns = pendingSpawns.filter(p => p.id !== pendingId);
+
         if (!resp.ok) {
-            hideSpawnLoading();
             const err = await resp.text();
+            refreshSleeves();
             alert('Failed to spawn sleeve: ' + err);
             return;
         }
 
-        hideSpawnLoading();
-        hideSpawnModal();
         refreshSleeves();
     } catch (e) {
+        pendingSpawns = [];
         hideSpawnLoading();
         console.error('Failed to spawn sleeve:', e);
         alert('Failed to spawn sleeve: ' + e.message);
+        refreshSleeves();
     }
 }
 

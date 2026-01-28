@@ -301,6 +301,34 @@ body {
     50% { box-shadow: 0 0 30px rgba(255, 0, 85, 0.4); }
 }
 
+.sleeve-card.spawning {
+    opacity: 0.85;
+}
+
+.sleeve-card.spawning::before {
+    background: var(--amber-glow);
+    box-shadow: 0 0 10px var(--amber-glow);
+    animation: pulse-spawning 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-spawning {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+
+.spawning-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem 0;
+    gap: 0.5rem;
+}
+
+.spawning-text {
+    color: var(--amber-glow);
+    font-size: var(--text-sm);
+}
+
 .sleeve-header {
     padding: 1rem 1.25rem;
     border-bottom: 1px solid var(--cyan-subtle);
@@ -332,6 +360,11 @@ body {
 .sleeve-status.idle {
     background: rgba(128, 128, 144, 0.2);
     color: var(--text-secondary);
+}
+
+.sleeve-status.spawning {
+    background: rgba(255, 170, 0, 0.2);
+    color: var(--amber-glow);
 }
 
 .constrained {
