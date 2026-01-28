@@ -67,6 +67,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/config", s.handleConfig)
 	mux.HandleFunc("/api/config/", s.handleConfigKey)
 	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
+	mux.HandleFunc("/api/auth/sync", s.handleAuthSync)
 	mux.HandleFunc("/api/auth/", s.handleAuthProvider)
 	mux.HandleFunc("/api/doctor", s.handleDoctor)
 	mux.HandleFunc("/api/docker/containers", s.handleDockerContainers)

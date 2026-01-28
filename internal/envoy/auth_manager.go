@@ -42,7 +42,17 @@ func (m *AuthManager) GetStatus() *protocol.AuthStatus {
 }
 
 func (m *AuthManager) getClaudeStatus() *protocol.ProviderAuthStatus {
-	credPath := filepath.Join(credsBasePath, "claude", "credentials.json")
+	// Check for synced credentials (.credentials.json with dot prefix - Claude's format)
+	credPath := filepath.Join(credsBasePath, "claude", ".credentials.json")
+	if _, err := os.Stat(credPath); err == nil {
+		return &protocol.ProviderAuthStatus{
+			Authenticated: true,
+			Method:        "oauth",
+		}
+	}
+
+	// Fallback: check old format (credentials.json without dot)
+	credPath = filepath.Join(credsBasePath, "claude", "credentials.json")
 	if _, err := os.Stat(credPath); err != nil {
 		return &protocol.ProviderAuthStatus{Authenticated: false}
 	}
@@ -61,7 +71,7 @@ func (m *AuthManager) getClaudeStatus() *protocol.ProviderAuthStatus {
 
 	return &protocol.ProviderAuthStatus{
 		Authenticated: creds.AccessToken != "",
-		Method:        "oauth",
+		Method:        "token",
 	}
 }
 
@@ -256,4 +266,81 @@ func (m *AuthManager) Revoke(provider protocol.AuthProvider) (*protocol.AuthRevo
 		Provider: string(provider),
 		Message:  "credentials revoked successfully",
 	}, nil
+}
+
+// SyncFromCLI copies credentials from CLI tool locations to the shared volume
+func (m *AuthManager) SyncFromCLI(provider string) (map[string]interface{}, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	result := map[string]interface{}{
+		"synced": []string{},
+		"errors": []string{},
+	}
+
+	synced := []string{}
+	errors := []string{}
+
+	if provider == "all" || provider == "claude" {
+		if err := m.syncClaude(); err != nil {
+			errors = append(errors, fmt.Sprintf("claude: %v", err))
+		} else {
+			synced = append(synced, "claude")
+		}
+	}
+
+	result["synced"] = synced
+	result["errors"] = errors
+
+	if len(synced) > 0 {
+		result["message"] = fmt.Sprintf("Synced: %v", synced)
+	} else if len(errors) > 0 {
+		result["message"] = fmt.Sprintf("Sync failed: %v", errors)
+	} else {
+		result["message"] = "Nothing to sync"
+	}
+
+	return result, nil
+}
+
+func (m *AuthManager) syncClaude() error {
+	homeDir := "/home/agent"
+
+	// Source locations (where Claude CLI stores credentials)
+	claudeCredsPath := filepath.Join(homeDir, ".claude", ".credentials.json")
+	claudeSettingsPath := filepath.Join(homeDir, ".claude.json")
+
+	// Destination in volume
+	destDir := filepath.Join(credsBasePath, "claude")
+	if err := os.MkdirAll(destDir, 0700); err != nil {
+		return fmt.Errorf("failed to create destination directory: %w", err)
+	}
+
+	// Copy credentials
+	if _, err := os.Stat(claudeCredsPath); err == nil {
+		data, err := os.ReadFile(claudeCredsPath)
+		if err != nil {
+			return fmt.Errorf("failed to read credentials: %w", err)
+		}
+		destPath := filepath.Join(destDir, ".credentials.json")
+		if err := os.WriteFile(destPath, data, 0600); err != nil {
+			return fmt.Errorf("failed to write credentials: %w", err)
+		}
+	} else {
+		return fmt.Errorf("no Claude credentials found at %s", claudeCredsPath)
+	}
+
+	// Copy settings
+	if _, err := os.Stat(claudeSettingsPath); err == nil {
+		data, err := os.ReadFile(claudeSettingsPath)
+		if err != nil {
+			return fmt.Errorf("failed to read settings: %w", err)
+		}
+		destPath := filepath.Join(destDir, "settings.json")
+		if err := os.WriteFile(destPath, data, 0600); err != nil {
+			return fmt.Errorf("failed to write settings: %w", err)
+		}
+	}
+
+	return nil
 }

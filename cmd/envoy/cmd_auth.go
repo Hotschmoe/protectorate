@@ -80,6 +80,36 @@ var authCommand = &cli.Command{
 				return nil
 			},
 		},
+		{
+			Name:  "sync",
+			Usage: "Sync credentials from CLI tool locations to shared volume",
+			ArgsUsage: "[provider]",
+			Action: func(c *cli.Context) error {
+				client := NewEnvoyClient(c.String("server"))
+				out := NewOutputWriter(c.Bool("json"), os.Stdout)
+
+				provider := c.Args().First()
+				if provider == "" {
+					provider = "all"
+				}
+
+				var result map[string]interface{}
+				if err := client.Post("/api/auth/sync", map[string]string{"provider": provider}, &result); err != nil {
+					return cli.Exit(err.Error(), 1)
+				}
+
+				if c.Bool("json") {
+					return out.Write(result, nil)
+				}
+
+				if msg, ok := result["message"].(string); ok {
+					out.WriteMessage(msg)
+				} else {
+					out.WriteMessage("Sync completed")
+				}
+				return nil
+			},
+		},
 	},
 	Action: func(c *cli.Context) error {
 		return authStatusAction(c)

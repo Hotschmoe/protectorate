@@ -2,13 +2,30 @@
 set -e
 
 chown -R agent:agent /home/agent/workspace
-chown -R agent:agent /home/agent/.claude 2>/dev/null || true
 chown -R agent:agent /home/agent/.creds 2>/dev/null || true
 chown -R agent:agent /home/agent/.config 2>/dev/null || true
 
-# Create credential symlinks for CLI tools
+# Setup Claude credentials from volume
+# Claude expects: ~/.claude/.credentials.json and ~/.claude.json
+if [ -f /home/agent/.creds/claude/.credentials.json ]; then
+    mkdir -p /home/agent/.claude
+    cp /home/agent/.creds/claude/.credentials.json /home/agent/.claude/.credentials.json
+    chown agent:agent /home/agent/.claude/.credentials.json
+    chmod 600 /home/agent/.claude/.credentials.json
+fi
+
+# Setup Claude settings (includes onboarding flag)
+if [ -f /home/agent/.creds/claude/settings.json ]; then
+    cp /home/agent/.creds/claude/settings.json /home/agent/.claude.json
+    chown agent:agent /home/agent/.claude.json
+    chmod 600 /home/agent/.claude.json
+fi
+
+# Ensure .claude directory ownership
+chown -R agent:agent /home/agent/.claude 2>/dev/null || true
+
+# Setup other CLI tool credentials
 su - agent -c "
-    ln -sf /home/agent/.creds/claude /home/agent/.claude 2>/dev/null || true
     ln -sf /home/agent/.creds/gemini /home/agent/.config/gemini 2>/dev/null || true
     ln -sf /home/agent/.creds/codex /home/agent/.codex 2>/dev/null || true
     ln -sf /home/agent/.creds/git /home/agent/.ssh 2>/dev/null || true
