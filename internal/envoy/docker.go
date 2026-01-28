@@ -294,6 +294,20 @@ var containerStatsCache = &statsCache{
 	ttl:  5 * time.Second,
 }
 
+// DHFInfo contains CLI tool name and version
+type DHFInfo struct {
+	Name    string
+	Version string
+}
+
+// dhfCache caches DHF version info (long TTL since version rarely changes)
+var dhfCache = struct {
+	mu   sync.RWMutex
+	data map[string]*DHFInfo
+}{
+	data: make(map[string]*DHFInfo),
+}
+
 // GetContainerStats returns resource stats for a container (cached for 5s)
 func (d *DockerClient) GetContainerStats(ctx context.Context, containerID string) (*protocol.ContainerResourceStats, error) {
 	containerStatsCache.mu.RLock()
@@ -343,6 +357,98 @@ func (d *DockerClient) GetContainerStats(ctx context.Context, containerID string
 		timestamp: time.Now(),
 	}
 	containerStatsCache.mu.Unlock()
+
+	return result, nil
+}
+
+// GetDHFInfo returns the CLI tool name and version for a container (cached indefinitely)
+func (d *DockerClient) GetDHFInfo(ctx context.Context, containerID string) (*DHFInfo, error) {
+	dhfCache.mu.RLock()
+	if cached, ok := dhfCache.data[containerID]; ok {
+		dhfCache.mu.RUnlock()
+		return cached, nil
+	}
+	dhfCache.mu.RUnlock()
+
+	info, err := d.detectDHF(ctx, containerID)
+	if err != nil {
+		return nil, err
+	}
+
+	dhfCache.mu.Lock()
+	dhfCache.data[containerID] = info
+	dhfCache.mu.Unlock()
+
+	return info, nil
+}
+
+// detectDHF tries known CLI tools and returns the first one found with its version
+func (d *DockerClient) detectDHF(ctx context.Context, containerID string) (*DHFInfo, error) {
+	tools := []struct {
+		cmd  string
+		name string
+	}{
+		{"claude", "Claude Code"},
+		{"gemini", "Gemini CLI"},
+		{"codex", "Codex CLI"},
+	}
+
+	for _, tool := range tools {
+		version, err := d.execCommand(ctx, containerID, tool.cmd, "--version")
+		if err == nil && version != "" {
+			return &DHFInfo{Name: tool.name, Version: version}, nil
+		}
+	}
+
+	return &DHFInfo{Name: "Unknown", Version: ""}, nil
+}
+
+// execCommand runs a command in a container and returns stdout
+func (d *DockerClient) execCommand(ctx context.Context, containerID string, cmd ...string) (string, error) {
+	execConfig := container.ExecOptions{
+		Cmd:          cmd,
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	resp, err := d.cli.ContainerExecCreate(ctx, containerID, execConfig)
+	if err != nil {
+		return "", err
+	}
+
+	attachResp, err := d.cli.ContainerExecAttach(ctx, resp.ID, container.ExecStartOptions{})
+	if err != nil {
+		return "", err
+	}
+	defer attachResp.Close()
+
+	output := make([]byte, 256)
+	n, _ := attachResp.Reader.Read(output)
+	if n == 0 {
+		return "", fmt.Errorf("no output")
+	}
+
+	result := string(output[:n])
+	// Strip any docker stream header bytes (first 8 bytes if present)
+	if len(result) > 8 && result[0] <= 2 {
+		result = result[8:]
+	}
+	// Trim whitespace and get first line
+	for i, c := range result {
+		if c == '\n' || c == '\r' {
+			result = result[:i]
+			break
+		}
+	}
+
+	// Check if exec failed
+	inspect, err := d.cli.ContainerExecInspect(ctx, resp.ID)
+	if err != nil {
+		return "", err
+	}
+	if inspect.ExitCode != 0 {
+		return "", fmt.Errorf("exit code %d", inspect.ExitCode)
+	}
 
 	return result, nil
 }

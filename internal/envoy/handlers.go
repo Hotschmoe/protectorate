@@ -114,6 +114,11 @@ func (s *Server) handleSleeves(w http.ResponseWriter, r *http.Request) {
 			if stats, err := s.docker.GetContainerStats(ctx, sleeve.ContainerID); err == nil {
 				sleeve.Resources = stats
 			}
+
+			if dhf, err := s.docker.GetDHFInfo(ctx, sleeve.ContainerID); err == nil {
+				sleeve.DHF = dhf.Name
+				sleeve.DHFVersion = dhf.Version
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")

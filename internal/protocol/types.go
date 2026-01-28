@@ -15,6 +15,8 @@ type SleeveInfo struct {
 	CPULimit      int                     `json:"cpu_limit,omitempty"`
 	Integrity     float64                 `json:"integrity"`
 	Resources     *ContainerResourceStats `json:"resources,omitempty"`
+	DHF           string                  `json:"dhf,omitempty"`
+	DHFVersion    string                  `json:"dhf_version,omitempty"`
 }
 
 // ContainerResourceStats holds resource usage for a container

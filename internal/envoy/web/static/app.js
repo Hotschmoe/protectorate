@@ -503,6 +503,10 @@ async function refreshSleeves() {
             const { memDisplay, memPct, cpuDisplay, cpuPct } = formatSleeveResources(s);
             const healthClass = getHealthClass(integrity);
 
+            const dhfName = s.dhf || 'Claude Code';
+            const dhfVersion = s.dhf_version ? ` v${s.dhf_version}` : '';
+            const dhfDisplay = dhfName + dhfVersion;
+
             return `
             <div class="sleeve-card ${healthClass}">
                 <div class="sleeve-header">
@@ -512,7 +516,7 @@ async function refreshSleeves() {
                 <div class="sleeve-body">
                     <div class="sleeve-row">
                         <span class="sleeve-label">DHF</span>
-                        <span class="sleeve-value">Claude Code</span>
+                        <span class="sleeve-value">${escapeHtml(dhfDisplay)}</span>
                     </div>
                     <div class="sleeve-row">
                         <span class="sleeve-label">Workspace</span>
