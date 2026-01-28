@@ -107,14 +107,13 @@ func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.Sleeve
 		"protectorate.name":      name,
 		"protectorate.workspace": workspace,
 	}
-	if constrained {
+	if req.MemoryLimitMB > 0 {
 		labels["protectorate.constrained"] = "true"
-		if req.MemoryLimitMB > 0 {
-			labels["protectorate.memory_limit_mb"] = fmt.Sprintf("%d", req.MemoryLimitMB)
-		}
-		if req.CPULimit > 0 {
-			labels["protectorate.cpu_limit"] = fmt.Sprintf("%d", req.CPULimit)
-		}
+		labels["protectorate.memory_limit_mb"] = strconv.FormatInt(req.MemoryLimitMB, 10)
+	}
+	if req.CPULimit > 0 {
+		labels["protectorate.constrained"] = "true"
+		labels["protectorate.cpu_limit"] = strconv.Itoa(req.CPULimit)
 	}
 
 	cfg := &container.Config{
@@ -164,13 +163,10 @@ func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.Sleeve
 		Mounts: mounts,
 	}
 
-	if constrained {
-		hostCfg.Resources = container.Resources{}
-		if req.MemoryLimitMB > 0 {
-			hostCfg.Resources.Memory = req.MemoryLimitMB * 1024 * 1024
-		}
-		if req.CPULimit > 0 {
-			hostCfg.Resources.NanoCPUs = int64(req.CPULimit) * 1e9
+	if req.MemoryLimitMB > 0 || req.CPULimit > 0 {
+		hostCfg.Resources = container.Resources{
+			Memory:   req.MemoryLimitMB * 1024 * 1024,
+			NanoCPUs: int64(req.CPULimit) * 1e9,
 		}
 	}
 

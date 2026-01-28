@@ -405,6 +405,41 @@ function getWorkspaceName(workspacePath) {
     return parts[parts.length - 1] || workspacePath;
 }
 
+function formatSleeveResources(sleeve) {
+    const resources = sleeve.resources;
+    const constrained = sleeve.constrained;
+
+    if (!resources) {
+        return { memDisplay: '-', memPct: 0, cpuDisplay: '-', cpuPct: 0 };
+    }
+
+    const memUsedBytes = resources.memory_used_bytes || 0;
+    const memUsedGB = (memUsedBytes / (1024 * 1024 * 1024)).toFixed(1);
+    const cpuPct = Math.round(resources.cpu_percent || 0);
+
+    let memDisplay, memPct, cpuDisplay;
+
+    if (constrained && sleeve.memory_limit_mb > 0) {
+        const memLimitGB = (sleeve.memory_limit_mb / 1024).toFixed(1);
+        memPct = Math.round(resources.memory_percent || 0);
+        memDisplay = `${memUsedGB} / ${memLimitGB} GB`;
+    } else {
+        memDisplay = `${memUsedGB} GB of host`;
+        memPct = 0;
+        if (hostStatsCache && hostStatsCache.memory && hostStatsCache.memory.total_bytes > 0) {
+            memPct = Math.round((memUsedBytes / hostStatsCache.memory.total_bytes) * 100);
+        }
+    }
+
+    if (constrained && sleeve.cpu_limit > 0) {
+        cpuDisplay = `${cpuPct}% of ${sleeve.cpu_limit} cores`;
+    } else {
+        cpuDisplay = `${cpuPct}% of host`;
+    }
+
+    return { memDisplay, memPct, cpuDisplay, cpuPct };
+}
+
 async function refreshSleeves() {
     try {
         const resp = await fetch('/api/sleeves');
@@ -425,36 +460,19 @@ async function refreshSleeves() {
             const uptime = formatDuration(Date.now() - new Date(s.spawn_time).getTime());
             const integrity = s.integrity !== undefined ? s.integrity.toFixed(1) : 100;
 
-            const constrained = s.constrained;
-            const constraintLabel = constrained ? 'CONSTRAINED' : 'UNCONSTRAINED';
-            const constraintClass = constrained ? 'constrained' : 'unconstrained';
+            const constraintLabel = s.constrained ? 'CONSTRAINED' : 'UNCONSTRAINED';
+            const constraintClass = s.constrained ? 'constrained' : 'unconstrained';
 
-            let memUsed = 0, memDisplay = '', memPct = 0, cpuPct = 0, cpuDisplay = '';
+            const { memDisplay, memPct, cpuDisplay, cpuPct } = formatSleeveResources(s);
 
-            if (s.resources) {
-                const memUsedBytes = s.resources.memory_used_bytes || 0;
-                memUsed = (memUsedBytes / (1024 * 1024 * 1024)).toFixed(1);
-
-                if (constrained && s.memory_limit_mb > 0) {
-                    const memLimitGB = (s.memory_limit_mb / 1024).toFixed(1);
-                    memPct = Math.round(s.resources.memory_percent || 0);
-                    memDisplay = `${memUsed} / ${memLimitGB} GB`;
-                } else {
-                    memDisplay = `${memUsed} GB of host`;
-                    if (hostStatsCache && hostStatsCache.memory && hostStatsCache.memory.total_bytes > 0) {
-                        memPct = Math.round((memUsedBytes / hostStatsCache.memory.total_bytes) * 100);
-                    }
-                }
-
-                cpuPct = Math.round(s.resources.cpu_percent || 0);
-                if (constrained && s.cpu_limit > 0) {
-                    cpuDisplay = `${cpuPct}% of ${s.cpu_limit} cores`;
-                } else {
-                    cpuDisplay = `${cpuPct}% of host`;
-                }
+            let healthClass;
+            if (integrity >= 80) {
+                healthClass = 'healthy';
+            } else if (integrity >= 50) {
+                healthClass = 'warning';
+            } else {
+                healthClass = 'critical';
             }
-
-            const healthClass = integrity >= 80 ? 'healthy' : integrity >= 50 ? 'warning' : 'critical';
 
             return `
             <div class="sleeve-card ${healthClass}">
