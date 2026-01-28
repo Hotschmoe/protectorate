@@ -226,35 +226,34 @@ When Claude token expires (most common case):
          v
 +------------------+
 | On HOST machine: |
-| claude setup-token|
+| claude auth login|
 +--------+---------+
          |
          v
 +------------------+
-| Copy new token   |
+| envoy auth sync  |
 +--------+---------+
          |
          v
 +------------------+
-| envoy auth login |
-| claude --token   |
+| Respawn sleeves  |
 +--------+---------+
          |
          v
     [Authenticated]
 ```
 
-**Quick re-auth script** (save as `~/.local/bin/protectorate-reauth`):
+**Quick re-auth commands:**
 ```bash
-#!/bin/bash
-echo "Generating new Claude token..."
-TOKEN=$(claude setup-token 2>/dev/null | tail -1)
-if [ -n "$TOKEN" ]; then
-    docker exec envoy envoy auth login claude --token "$TOKEN"
-    echo "Re-authenticated successfully"
-else
-    echo "Failed to generate token. Run: claude auth login"
-fi
+# 1. Re-authenticate Claude CLI on host
+claude auth login
+
+# 2. Sync credentials to Protectorate
+docker exec envoy envoy auth sync
+
+# 3. Respawn sleeves to pick up new credentials
+docker exec envoy envoy kill <sleeve-name>
+docker exec envoy envoy spawn <workspace>
 ```
 
 ---
@@ -367,7 +366,7 @@ docker exec envoy envoy spawn <workspace>
 Claude tokens can expire mid-session. Current workaround:
 1. Re-authenticate on host: `claude auth login`
 2. Re-sync: `docker exec envoy envoy auth sync`
-2. Kill and respawn the sleeve
+3. Kill and respawn the sleeve
 
 Future: Token refresh hook that updates credentials without sleeve restart.
 
