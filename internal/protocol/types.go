@@ -4,19 +4,20 @@ import "time"
 
 // SleeveInfo represents a running sleeve container
 type SleeveInfo struct {
-	Name          string                  `json:"name"`
-	ContainerID   string                  `json:"container_id"`
-	ContainerName string                  `json:"container_name"`
-	Workspace     string                  `json:"workspace"`
-	SpawnTime     time.Time               `json:"spawn_time"`
-	Status        string                  `json:"status"`
-	Constrained   bool                    `json:"constrained"`
-	MemoryLimitMB int64                   `json:"memory_limit_mb,omitempty"`
-	CPULimit      int                     `json:"cpu_limit,omitempty"`
-	Integrity     float64                 `json:"integrity"`
-	Resources     *ContainerResourceStats `json:"resources,omitempty"`
-	DHF           string                  `json:"dhf,omitempty"`
-	DHFVersion    string                  `json:"dhf_version,omitempty"`
+	Name           string                  `json:"name"`
+	ContainerID    string                  `json:"container_id"`
+	ContainerName  string                  `json:"container_name"`
+	Workspace      string                  `json:"workspace"`
+	SpawnTime      time.Time               `json:"spawn_time"`
+	Status         string                  `json:"status"`
+	Constrained    bool                    `json:"constrained"`
+	MemoryLimitMB  int64                   `json:"memory_limit_mb,omitempty"`
+	CPULimit       int                     `json:"cpu_limit,omitempty"`
+	Integrity      float64                 `json:"integrity"`
+	SidecarHealthy bool                    `json:"sidecar_healthy"`
+	Resources      *ContainerResourceStats `json:"resources,omitempty"`
+	DHF            string                  `json:"dhf,omitempty"`
+	DHFVersion     string                  `json:"dhf_version,omitempty"`
 }
 
 // ContainerResourceStats holds resource usage for a container

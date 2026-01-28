@@ -140,6 +140,7 @@ func (s *Server) handleSleeves(w http.ResponseWriter, r *http.Request) {
 			sleeve.Integrity = 100.0
 
 			if status, ok := sidecarStatuses[sleeve.ContainerName]; ok {
+				sleeve.SidecarHealthy = true
 				if status.DHF != nil {
 					sleeve.DHF = status.DHF.Name
 					sleeve.DHFVersion = status.DHF.Version
