@@ -12,12 +12,12 @@ build-base:
 		containers/base/
 
 # Build the sleeve image (fast, uses base)
-build-sleeve:
+build-sleeve: bin/sidecar
 	DOCKER_BUILDKIT=1 docker build \
 		--provenance=false \
 		-t protectorate/sleeve:latest \
 		-f containers/sleeve/Dockerfile \
-		containers/sleeve/
+		.
 
 # Build envoy for dev (fast: local Go build + copy binary)
 build-envoy: bin/envoy
@@ -27,10 +27,14 @@ build-envoy: bin/envoy
 		-f containers/envoy/Dockerfile.dev \
 		.
 
-# Build Go binary locally
+# Build Go binaries locally
 bin/envoy: $(shell find . -name '*.go' -type f)
 	@mkdir -p bin
 	CGO_ENABLED=0 GOOS=linux go build -o bin/envoy ./cmd/envoy
+
+bin/sidecar: $(shell find . -name '*.go' -type f)
+	@mkdir -p bin
+	CGO_ENABLED=0 GOOS=linux go build -o bin/sidecar ./cmd/sidecar
 
 # Build envoy for release (slow: multi-stage, self-contained)
 build-envoy-release:

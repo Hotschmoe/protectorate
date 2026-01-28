@@ -37,4 +37,4 @@ chmod +x /usr/local/bin/sleeve-session.sh
 # dtach: -n creates daemon session (no attach), -z disables suspend
 su - claude -c "dtach -n $SOCKET_PATH -z /usr/local/bin/sleeve-session.sh"
 
-exec sleep infinity
+exec /usr/local/bin/sidecar
