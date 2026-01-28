@@ -40,22 +40,6 @@ func NewSleeveManager(docker *DockerClient, cfg *config.EnvoyConfig) *SleeveMana
 	}
 }
 
-func (m *SleeveManager) allocateName() string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for _, name := range namePool {
-		if !m.usedNames[name] {
-			m.usedNames[name] = true
-			return name
-		}
-	}
-
-	name := fmt.Sprintf("sleeve-%d", time.Now().UnixNano())
-	m.usedNames[name] = true
-	return name
-}
-
 func (m *SleeveManager) releaseName(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -71,6 +55,45 @@ func (m *SleeveManager) toHostPath(containerPath string) string {
 	return containerPath
 }
 
+// reserveWorkspaceAndName atomically checks workspace availability and reserves
+// both the workspace (marking it pending) and the sleeve name. Returns the
+// reserved name or an error. Caller must release pendingWorkspaces on completion.
+func (m *SleeveManager) reserveWorkspaceAndName(workspace, requestedName string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.pendingWorkspaces[workspace] {
+		return "", fmt.Errorf("workspace %q already has a spawn in progress", workspace)
+	}
+	for _, s := range m.sleeves {
+		if s.Workspace == workspace {
+			return "", fmt.Errorf("workspace %q is already in use by sleeve %q", workspace, s.Name)
+		}
+	}
+
+	var name string
+	if requestedName == "" {
+		for _, n := range namePool {
+			if !m.usedNames[n] {
+				name = n
+				break
+			}
+		}
+		if name == "" {
+			name = fmt.Sprintf("sleeve-%d", time.Now().UnixNano())
+		}
+	} else {
+		if m.usedNames[requestedName] {
+			return "", fmt.Errorf("sleeve name %q already in use", requestedName)
+		}
+		name = requestedName
+	}
+
+	m.pendingWorkspaces[workspace] = true
+	m.usedNames[name] = true
+	return name, nil
+}
+
 func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.SleeveInfo, error) {
 	workspace := req.Workspace
 
@@ -82,38 +105,16 @@ func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.Sleeve
 		return nil, fmt.Errorf("workspace %q does not exist", workspace)
 	}
 
-	m.mu.Lock()
-	if m.pendingWorkspaces[workspace] {
-		m.mu.Unlock()
-		return nil, fmt.Errorf("workspace %q already has a spawn in progress", workspace)
+	name, err := m.reserveWorkspaceAndName(workspace, req.Name)
+	if err != nil {
+		return nil, err
 	}
-	for _, s := range m.sleeves {
-		if s.Workspace == workspace {
-			m.mu.Unlock()
-			return nil, fmt.Errorf("workspace %q is already in use by sleeve %q", workspace, s.Name)
-		}
-	}
-	m.pendingWorkspaces[workspace] = true
-	m.mu.Unlock()
 
 	defer func() {
 		m.mu.Lock()
 		delete(m.pendingWorkspaces, workspace)
 		m.mu.Unlock()
 	}()
-
-	name := req.Name
-	if name == "" {
-		name = m.allocateName()
-	} else {
-		m.mu.Lock()
-		if m.usedNames[name] {
-			m.mu.Unlock()
-			return nil, fmt.Errorf("sleeve name %q already in use", name)
-		}
-		m.usedNames[name] = true
-		m.mu.Unlock()
-	}
 
 	containerName := "sleeve-" + name
 
