@@ -137,10 +137,10 @@ func (g *TerminalGateway) startExecSession() error {
 	session, err := g.docker.ExecAttach(g.ctx, ExecAttachOptions{
 		Container: g.container,
 		Cmd:       cmd,
-		User:      "claude",
+		User:      "agent",
 		Env: []string{
 			"TERM=xterm-256color",
-			"PATH=/home/claude/.local/bin:/usr/local/bin:/usr/bin:/bin",
+			"PATH=/home/agent/.local/bin:/usr/local/bin:/usr/bin:/bin",
 		},
 		Cols: g.initialCols,
 		Rows: g.initialRows,

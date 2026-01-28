@@ -42,6 +42,7 @@ func main() {
 			pushCommand,
 			statsCommand,
 			authCommand,
+			configCommand,
 		},
 		DefaultCommand: "serve",
 	}

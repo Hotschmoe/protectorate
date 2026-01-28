@@ -63,7 +63,7 @@ func (h *HostStatsCollector) GetStats(ctx context.Context) *protocol.HostStats {
 
 	stats.CPU = h.GetCPUStats()
 	stats.Memory = h.GetMemoryStats()
-	stats.Disk = h.GetDiskStats("/home/claude/workspaces")
+	stats.Disk = h.GetDiskStats("/home/agent/workspaces")
 	stats.Docker = h.GetDockerStats(ctx)
 
 	return stats

@@ -39,15 +39,6 @@ func gitErrorStatus(err error) int {
 	return http.StatusInternalServerError
 }
 
-func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
-	credPath := "/home/claude/.claude/.credentials.json"
-	_, err := os.Stat(credPath)
-	authenticated := err == nil
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"authenticated": authenticated})
-}
-
 func (s *Server) handleDockerContainers(w http.ResponseWriter, r *http.Request) {
 	containers, err := s.docker.ListContainers()
 	if err != nil {
@@ -230,7 +221,7 @@ func (s *Server) handleSleeveTerminal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	readOnly := r.URL.Query().Get("mode") == "observe"
-	socketPath := "/home/claude/.dtach/session.sock"
+	socketPath := "/home/agent/.dtach/session.sock"
 
 	gateway := NewTerminalGateway(s.docker, sleeve.ContainerName, socketPath, readOnly)
 	gateway.Start(w, r)
@@ -238,7 +229,7 @@ func (s *Server) handleSleeveTerminal(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleEnvoyTerminal(w http.ResponseWriter, r *http.Request) {
 	readOnly := r.URL.Query().Get("mode") == "observe"
-	socketPath := "/home/claude/.dtach/session.sock"
+	socketPath := "/home/agent/.dtach/session.sock"
 
 	envoyContainer, err := s.docker.GetContainerByName("envoy-dev")
 	if err != nil || envoyContainer == nil {
@@ -628,7 +619,7 @@ func checkSSHAgent() protocol.DoctorCheck {
 }
 
 func checkClaudeCredentials() protocol.DoctorCheck {
-	credPath := "/home/claude/.claude/.credentials.json"
+	credPath := "/home/agent/.creds/claude/credentials.json"
 	if _, err := os.Stat(credPath); err == nil {
 		return protocol.DoctorCheck{
 			Name:    "Claude Credentials",
@@ -657,7 +648,7 @@ func checkGeminiCredentials() protocol.DoctorCheck {
 	// Check for OAuth tokens
 	homeDir := os.Getenv("HOME")
 	if homeDir == "" {
-		homeDir = "/home/claude"
+		homeDir = "/home/agent"
 	}
 	oauthPaths := []string{
 		homeDir + "/.config/gemini-cli/oauth_tokens.json",
@@ -695,7 +686,7 @@ func checkCodexCredentials() protocol.DoctorCheck {
 	// Check for cached auth
 	homeDir := os.Getenv("HOME")
 	if homeDir == "" {
-		homeDir = "/home/claude"
+		homeDir = "/home/agent"
 	}
 	authPaths := []string{
 		homeDir + "/.codex/auth.json",

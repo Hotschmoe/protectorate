@@ -1,21 +1,15 @@
 services:
   envoy:
-    container_name: envoy-poe
     image: ghcr.io/hotschmoe/protectorate-envoy:latest
+    container_name: envoy
     ports:
       - "7470:7470"
-    environment:
-      - WORKSPACE_HOST_ROOT=${PWD}/workspaces
-      - CREDENTIALS_HOST_PATH=${HOME}/.claude/.credentials.json
-      - SETTINGS_HOST_PATH=${HOME}/.claude.json
-      - PLUGINS_HOST_PATH=${HOME}/.claude/plugins
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - agent-config:/home/agent/.config
+      - agent-creds:/home/agent/.creds
+      - agent-workspaces:/home/agent/workspaces
       - /proc:/host/proc:ro
-      - ~/.claude/.credentials.json:/home/claude/.claude/.credentials.json:ro
-      - ~/.claude.json:/etc/claude/settings.json:ro
-      - ~/.claude/plugins:/home/claude/.claude/plugins:ro
-      - ./workspaces:/home/claude/workspaces
     networks:
       - raven
     restart: unless-stopped
@@ -23,3 +17,8 @@ services:
 networks:
   raven:
     name: raven
+
+volumes:
+  agent-config:
+  agent-creds:
+  agent-workspaces:

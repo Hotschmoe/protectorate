@@ -36,8 +36,8 @@ func (a *AuthChecker) check() *AuthInfo {
 	}
 
 	return &AuthInfo{
-		ClaudeAuth: fileExists(filepath.Join(homeDir, ".claude", "credentials.json")),
-		GeminiAuth: fileExists(filepath.Join(homeDir, ".config", "gemini", "credentials.json")),
+		ClaudeAuth: fileExists(filepath.Join(homeDir, ".creds", "claude", "credentials.json")),
+		GeminiAuth: fileExists(filepath.Join(homeDir, ".creds", "gemini", "credentials.json")),
 	}
 }
 

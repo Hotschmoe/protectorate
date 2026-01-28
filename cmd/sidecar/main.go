@@ -17,7 +17,7 @@ func main() {
 	cfg := &sidecar.Config{
 		Port:          getEnvInt("SIDECAR_PORT", 8080),
 		SleeveName:    getEnv("SLEEVE_NAME", "unknown"),
-		WorkspacePath: getEnv("WORKSPACE_PATH", "/home/claude/workspace"),
+		WorkspacePath: getEnv("WORKSPACE_PATH", "/home/agent/workspace"),
 	}
 
 	server := sidecar.NewServer(cfg)

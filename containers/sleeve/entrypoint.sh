@@ -1,26 +1,31 @@
 #!/bin/bash
 set -e
 
-chown -R claude:claude /home/claude/workspace
-chown -R claude:claude /home/claude/.claude 2>/dev/null || true
+chown -R agent:agent /home/agent/workspace
+chown -R agent:agent /home/agent/.claude 2>/dev/null || true
+chown -R agent:agent /home/agent/.creds 2>/dev/null || true
+chown -R agent:agent /home/agent/.config 2>/dev/null || true
 
-if [ -f /etc/claude/settings.json ]; then
-    cp /etc/claude/settings.json /home/claude/.claude/settings.json
-    chown claude:claude /home/claude/.claude/settings.json
-fi
+# Create credential symlinks for CLI tools
+su - agent -c "
+    ln -sf /home/agent/.creds/claude /home/agent/.claude 2>/dev/null || true
+    ln -sf /home/agent/.creds/gemini /home/agent/.config/gemini 2>/dev/null || true
+    ln -sf /home/agent/.creds/codex /home/agent/.codex 2>/dev/null || true
+    ln -sf /home/agent/.creds/git /home/agent/.ssh 2>/dev/null || true
+"
 
-SOCKET_DIR="/home/claude/.dtach"
+SOCKET_DIR="/home/agent/.dtach"
 SOCKET_PATH="${SOCKET_DIR}/session.sock"
 
 mkdir -p "$SOCKET_DIR"
-chown claude:claude "$SOCKET_DIR"
+chown agent:agent "$SOCKET_DIR"
 
 # Session script: bash shell (envoy can send commands to start claude)
 cat > /usr/local/bin/sleeve-session.sh << 'SCRIPT'
 #!/bin/bash
 export TERM=xterm-256color
 export PATH="$HOME/.local/bin:$PATH"
-cd /home/claude/workspace
+cd /home/agent/workspace
 
 while true; do
     bash --login
@@ -35,6 +40,6 @@ SCRIPT
 chmod +x /usr/local/bin/sleeve-session.sh
 
 # dtach: -n creates daemon session (no attach), -z disables suspend
-su - claude -c "dtach -n $SOCKET_PATH -z /usr/local/bin/sleeve-session.sh"
+su - agent -c "dtach -n $SOCKET_PATH -z /usr/local/bin/sleeve-session.sh"
 
 exec /usr/local/bin/sidecar

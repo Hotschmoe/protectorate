@@ -247,8 +247,10 @@ See: [cortical-stack](https://github.com/hotschmoe/cortical-stack) for the memor
 
 ## Configuration
 
-- Envoy config: `configs/envoy.yaml`
-- Environment variables: `.env` (copy from `.env.example`)
+Configuration is managed through:
+- Named Docker volumes for data persistence
+- Environment variables for runtime settings (see `envoy config` command)
+- The `envoy auth` command for credential management
 
 ---
 

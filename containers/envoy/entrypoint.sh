@@ -1,8 +1,10 @@
 #!/bin/bash
 set -e
 
-chown -R claude:claude /home/claude/workspaces 2>/dev/null || true
-chown -R claude:claude /home/claude/.claude 2>/dev/null || true
+chown -R agent:agent /home/agent/workspaces 2>/dev/null || true
+chown -R agent:agent /home/agent/.claude 2>/dev/null || true
+chown -R agent:agent /home/agent/.creds 2>/dev/null || true
+chown -R agent:agent /home/agent/.config 2>/dev/null || true
 mkdir -p /app/web 2>/dev/null || true
 
 if [ -S /ssh-agent ]; then
@@ -10,23 +12,26 @@ if [ -S /ssh-agent ]; then
     ssh-keyscan github.com gitlab.com >> /root/.ssh/known_hosts 2>/dev/null
 fi
 
-if [ -f /etc/claude/settings.json ]; then
-    cp /etc/claude/settings.json /home/claude/.claude/settings.json
-    chown claude:claude /home/claude/.claude/settings.json
-fi
+# Create credential symlinks for CLI tools
+su - agent -c "
+    ln -sf /home/agent/.creds/claude /home/agent/.claude 2>/dev/null || true
+    ln -sf /home/agent/.creds/gemini /home/agent/.config/gemini 2>/dev/null || true
+    ln -sf /home/agent/.creds/codex /home/agent/.codex 2>/dev/null || true
+    ln -sf /home/agent/.creds/git /home/agent/.ssh 2>/dev/null || true
+"
 
-SOCKET_DIR="/home/claude/.dtach"
+SOCKET_DIR="/home/agent/.dtach"
 SOCKET_PATH="${SOCKET_DIR}/session.sock"
 
 mkdir -p "$SOCKET_DIR"
-chown claude:claude "$SOCKET_DIR"
+chown agent:agent "$SOCKET_DIR"
 
 # Session script with TERM and PATH set, plus restart loop
 cat > /usr/local/bin/envoy-session.sh << 'SCRIPT'
 #!/bin/bash
 export TERM=xterm-256color
 export PATH="$HOME/.local/bin:$PATH"
-cd /home/claude/workspaces
+cd /home/agent/workspaces
 
 while true; do
     bash --login
@@ -41,6 +46,6 @@ SCRIPT
 chmod +x /usr/local/bin/envoy-session.sh
 
 # dtach: -n creates daemon session (no attach), -z disables suspend
-su - claude -c "dtach -n $SOCKET_PATH -z /usr/local/bin/envoy-session.sh"
+su - agent -c "dtach -n $SOCKET_PATH -z /usr/local/bin/envoy-session.sh"
 
 exec envoy

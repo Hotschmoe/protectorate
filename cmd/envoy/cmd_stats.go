@@ -47,29 +47,3 @@ var statsCommand = &cli.Command{
 		return nil
 	},
 }
-
-var authCommand = &cli.Command{
-	Name:  "auth",
-	Usage: "Show authentication status",
-	Action: func(c *cli.Context) error {
-		client := NewEnvoyClient(c.String("server"))
-		out := NewOutputWriter(c.Bool("json"), os.Stdout)
-
-		var status map[string]bool
-		if err := client.Get("/api/auth/status", &status); err != nil {
-			return cli.Exit(err.Error(), 1)
-		}
-
-		if c.Bool("json") {
-			return out.Write(status, nil)
-		}
-
-		if status["authenticated"] {
-			out.WriteMessage("Claude: authenticated")
-		} else {
-			out.WriteMessage("Claude: not authenticated")
-		}
-
-		return nil
-	},
-}

@@ -18,6 +18,7 @@ type Server struct {
 	workspaces  *WorkspaceManager
 	agentDoctor *AgentDoctorManager
 	hostStats   *HostStatsCollector
+	auth        *AuthManager
 }
 
 func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
@@ -31,6 +32,7 @@ func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
 	agentDoctor := NewAgentDoctorManager(cfg)
 	hostStats := NewHostStatsCollector(docker, 20)
 	sidecar := NewSidecarClient(cfg.Docker.Network)
+	auth := NewAuthManager()
 
 	if err := sleeves.RecoverSleeves(); err != nil {
 		return nil, fmt.Errorf("failed to recover sleeves: %w", err)
@@ -44,6 +46,7 @@ func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
 		workspaces:  workspaces,
 		agentDoctor: agentDoctor,
 		hostStats:   hostStats,
+		auth:        auth,
 	}
 
 	mux := http.NewServeMux()
@@ -61,7 +64,10 @@ func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
 
 func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/api/config", s.handleConfig)
+	mux.HandleFunc("/api/config/", s.handleConfigKey)
 	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
+	mux.HandleFunc("/api/auth/", s.handleAuthProvider)
 	mux.HandleFunc("/api/doctor", s.handleDoctor)
 	mux.HandleFunc("/api/docker/containers", s.handleDockerContainers)
 	mux.HandleFunc("/api/docker/networks", s.handleDockerNetworks)

@@ -19,13 +19,9 @@ type EnvoyConfig struct {
 
 // DockerConfig defines Docker-specific configuration.
 type DockerConfig struct {
-	Network             string
-	WorkspaceRoot       string
-	WorkspaceHostRoot   string
-	CredentialsHostPath string
-	SettingsHostPath    string
-	PluginsHostPath     string
-	SleeveImage         string
+	Network       string
+	WorkspaceRoot string
+	SleeveImage   string
 }
 
 // GiteaConfig defines Gitea configuration.
@@ -93,11 +89,7 @@ func getEnvBool(key string, defaultVal bool) bool {
 //	ENVOY_MAX_SLEEVES       - Maximum concurrent sleeves (default: 10)
 //
 //	DOCKER_NETWORK          - Docker network name (default: raven)
-//	WORKSPACE_ROOT          - Container path for workspaces (default: /home/claude/workspaces)
-//	WORKSPACE_HOST_ROOT     - Host path for workspaces (required for sleeve mounts)
-//	CREDENTIALS_HOST_PATH   - Host path to Claude credentials file
-//	SETTINGS_HOST_PATH      - Host path to Claude settings file
-//	PLUGINS_HOST_PATH       - Host path to Claude plugins directory
+//	WORKSPACE_ROOT          - Container path for workspaces (default: /home/agent/workspaces)
 //	SLEEVE_IMAGE            - Docker image for sleeves (default: ghcr.io/hotschmoe/protectorate-sleeve:latest)
 //
 //	GITEA_URL               - Gitea server URL (default: http://gitea:3000)
@@ -116,13 +108,9 @@ func LoadEnvoyConfig() *EnvoyConfig {
 		IdleThreshold: getEnvDuration("ENVOY_IDLE_THRESHOLD", 0),
 		MaxSleeves:    getEnvInt("ENVOY_MAX_SLEEVES", 10),
 		Docker: DockerConfig{
-			Network:             getEnv("DOCKER_NETWORK", "raven"),
-			WorkspaceRoot:       getEnv("WORKSPACE_ROOT", "/home/claude/workspaces"),
-			WorkspaceHostRoot:   getEnv("WORKSPACE_HOST_ROOT", ""),
-			CredentialsHostPath: getEnv("CREDENTIALS_HOST_PATH", ""),
-			SettingsHostPath:    getEnv("SETTINGS_HOST_PATH", ""),
-			PluginsHostPath:     getEnv("PLUGINS_HOST_PATH", ""),
-			SleeveImage:         getEnv("SLEEVE_IMAGE", "ghcr.io/hotschmoe/protectorate-sleeve:latest"),
+			Network:       getEnv("DOCKER_NETWORK", "raven"),
+			WorkspaceRoot: getEnv("WORKSPACE_ROOT", "/home/agent/workspaces"),
+			SleeveImage:   getEnv("SLEEVE_IMAGE", "ghcr.io/hotschmoe/protectorate-sleeve:latest"),
 		},
 		Gitea: GiteaConfig{
 			URL:      getEnv("GITEA_URL", "http://gitea:3000"),

@@ -29,13 +29,13 @@ RUN curl -fsSL "https://github.com/Hotschmoe/cstack/releases/download/v${CSTACK_
     && chmod +x /usr/local/bin/cs \
     && rm /tmp/cstack.tar.gz
 
-RUN useradd -m -s /bin/bash -u 1000 claude \
-    && mkdir -p /home/claude/.claude /home/claude/.dtach /etc/claude \
-    && chown -R claude:claude /home/claude
+RUN useradd -m -s /bin/bash -u 1000 agent \
+    && mkdir -p /home/agent/.claude /home/agent/.dtach /home/agent/.creds /home/agent/.config \
+    && chown -R agent:agent /home/agent
 
-USER claude
+USER agent
 RUN curl -fsSL https://claude.ai/install.sh | bash \
     && echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 USER root
 
-WORKDIR /home/claude
+WORKDIR /home/agent

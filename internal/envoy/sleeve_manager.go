@@ -46,13 +46,19 @@ func (m *SleeveManager) releaseName(name string) {
 	delete(m.usedNames, name)
 }
 
-func (m *SleeveManager) toHostPath(containerPath string) string {
+// extractWorkspaceName extracts the workspace name from a full path
+// e.g., /home/agent/workspaces/my-repo -> my-repo
+func (m *SleeveManager) extractWorkspaceName(workspacePath string) string {
 	wsRoot := m.cfg.Docker.WorkspaceRoot
-	wsHostRoot := m.cfg.Docker.WorkspaceHostRoot
-	if wsRoot != "" && wsHostRoot != "" && strings.HasPrefix(containerPath, wsRoot) {
-		return wsHostRoot + strings.TrimPrefix(containerPath, wsRoot)
+	if strings.HasPrefix(workspacePath, wsRoot+"/") {
+		return strings.TrimPrefix(workspacePath, wsRoot+"/")
 	}
-	return containerPath
+	// Fallback: use basename
+	parts := strings.Split(workspacePath, "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return workspacePath
 }
 
 // reserveWorkspaceAndName atomically checks workspace availability and reserves
@@ -144,42 +150,24 @@ func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.Sleeve
 		Labels: labels,
 	}
 
-	workspaceHostPath := m.toHostPath(workspace)
+	workspaceName := m.extractWorkspaceName(workspace)
 
+	// Use named volumes for workspace and credentials
 	mounts := []mount.Mount{
 		{
-			Type:     mount.TypeBind,
-			Source:   workspaceHostPath,
-			Target:   "/home/claude/workspace",
-			ReadOnly: false,
+			Type:   mount.TypeVolume,
+			Source: "agent-workspaces",
+			Target: "/home/agent/workspace",
+			VolumeOptions: &mount.VolumeOptions{
+				Subpath: workspaceName,
+			},
 		},
-	}
-
-	if m.cfg.Docker.CredentialsHostPath != "" {
-		mounts = append(mounts, mount.Mount{
-			Type:     mount.TypeBind,
-			Source:   m.cfg.Docker.CredentialsHostPath,
-			Target:   "/home/claude/.claude/.credentials.json",
+		{
+			Type:     mount.TypeVolume,
+			Source:   "agent-creds",
+			Target:   "/home/agent/.creds",
 			ReadOnly: true,
-		})
-	}
-
-	if m.cfg.Docker.SettingsHostPath != "" {
-		mounts = append(mounts, mount.Mount{
-			Type:     mount.TypeBind,
-			Source:   m.cfg.Docker.SettingsHostPath,
-			Target:   "/etc/claude/settings.json",
-			ReadOnly: true,
-		})
-	}
-
-	if m.cfg.Docker.PluginsHostPath != "" {
-		mounts = append(mounts, mount.Mount{
-			Type:     mount.TypeBind,
-			Source:   m.cfg.Docker.PluginsHostPath,
-			Target:   "/home/claude/.claude/plugins",
-			ReadOnly: true,
-		})
+		},
 	}
 
 	hostCfg := &container.HostConfig{
