@@ -277,12 +277,13 @@ func formatWorkspacesTable(workspaces []*protocol.WorkspaceInfo) ([]string, [][]
 			}
 		}
 
-		status := "ok"
-		if w.SizeWarning {
-			status = "large"
-		}
+		var status string
 		if w.SizeCritical {
 			status = "critical"
+		} else if w.SizeWarning {
+			status = "large"
+		} else {
+			status = "ok"
 		}
 
 		cstack := "-"

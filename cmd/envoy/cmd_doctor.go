@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/hotschmoe/protectorate/internal/protocol"
@@ -26,18 +25,18 @@ var doctorCommand = &cli.Command{
 
 		hasIssues := false
 		for _, check := range checks {
-			status := statusIcon(check.Status)
-			fmt.Fprintf(os.Stdout, "%s %s: %s\n", status, check.Name, check.Message)
+			icon := statusIcon(check.Status)
+			out.WriteMessage("%s %s: %s", icon, check.Name, check.Message)
 			if check.Suggestion != "" && check.Status != "pass" {
-				fmt.Fprintf(os.Stdout, "  -> %s\n", check.Suggestion)
+				out.WriteMessage("  -> %s", check.Suggestion)
 				hasIssues = true
 			}
 		}
 
 		if hasIssues {
-			fmt.Fprintln(os.Stdout, "\nSome checks have issues. See suggestions above.")
+			out.WriteMessage("\nSome checks have issues. See suggestions above.")
 		} else {
-			fmt.Fprintln(os.Stdout, "\nAll checks passed.")
+			out.WriteMessage("\nAll checks passed.")
 		}
 
 		return nil
