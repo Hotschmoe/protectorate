@@ -62,35 +62,45 @@ All credentials live in the `agent-creds` Docker volume, mounted at `/home/agent
 
 ### Claude (Subscription OAuth)
 
-Claude uses a "setup-token" flow that generates a long-lived OAuth token from your subscription.
+Claude credentials are synced from your host machine's Claude CLI installation.
 
-**Step 1: Generate token on host machine**
+**Step 1: Authenticate Claude CLI on host**
 ```bash
 # On your local machine (not in container)
 claude auth login
 # Complete browser OAuth flow
-
-# Generate long-lived token
-claude setup-token
-# Copy the displayed token
 ```
 
-**Step 2: Store in Protectorate**
+**Step 2: Sync credentials to Protectorate**
 ```bash
-# In envoy container or via CLI
-docker exec envoy envoy auth login claude "<paste-token-here>"
+# Copies ~/.claude/.credentials.json and ~/.claude.json to shared volume
+docker exec envoy envoy auth sync
 ```
 
 **Step 3: Verify**
 ```bash
 docker exec envoy envoy auth status
-# Should show: claude: authenticated (token)
+# Should show: claude: authenticated (oauth)
 ```
 
-**Token expiration**: Claude setup-tokens are valid for **1 year**. When expired:
+**What gets synced:**
+- `~/.claude/.credentials.json` - OAuth access/refresh tokens
+- `~/.claude.json` - Settings including `hasCompletedOnboarding` flag
+
+**Sleeve inheritance:** When sleeves spawn, the entrypoint copies credentials from the shared volume. Sleeves inherit both authentication AND settings, so they skip onboarding prompts.
+
+**Important:** After syncing credentials, you must rebuild sleeves or respawn them to pick up the new credentials:
+```bash
+make build-sleeve              # Rebuild sleeve image
+docker exec envoy envoy kill <sleeve-name>  # Kill old sleeve
+docker exec envoy envoy spawn <workspace>   # Spawn with new credentials
+```
+
+**Token expiration**: Claude OAuth tokens are valid for **1 year**. When expired:
 1. `envoy auth status` shows expired
-2. Re-run `claude setup-token` on host
-3. Re-run `envoy auth login claude --token "<new-token>"`
+2. Re-run `claude auth login` on host
+3. Re-run `envoy auth sync`
+4. Respawn sleeves to pick up new credentials
 
 ---
 
@@ -333,20 +343,30 @@ DELETE /api/auth/<provider>        # Revoke credentials
 
 ### "Claude: not authenticated"
 
-1. Check if token exists: `docker exec envoy cat /home/agent/.creds/claude/credentials.json`
-2. Regenerate: `claude setup-token` on host
-3. Re-store: `docker exec envoy envoy auth login claude --token "..."`
+1. Check if credentials exist: `docker exec envoy cat /home/agent/.creds/claude/.credentials.json`
+2. Re-authenticate on host: `claude auth login`
+3. Re-sync: `docker exec envoy envoy auth sync`
 
-### "Sleeves can't access credentials"
+### "Sleeves can't access credentials" or "Sleeve asks for login/setup"
 
-1. Check volume mount: `docker exec <sleeve> ls -la /home/agent/.creds/`
-2. Check symlink: `docker exec <sleeve> ls -la /home/agent/.claude`
-3. Verify permissions: credentials should be readable by `agent` user
+This usually means the sleeve was spawned before credentials were synced, or using an old image.
+
+1. Verify credentials in volume: `docker exec <sleeve> ls -la /home/agent/.creds/claude/`
+2. Check if credentials were copied: `docker exec <sleeve> ls -la /home/agent/.claude/.credentials.json`
+3. Check settings: `docker exec <sleeve> cat /home/agent/.claude.json | grep hasCompletedOnboarding`
+
+**Fix:** Rebuild and respawn:
+```bash
+make build-sleeve
+docker exec envoy envoy kill <sleeve-name>
+docker exec envoy envoy spawn <workspace>
+```
 
 ### "Token expired during long task"
 
 Claude tokens can expire mid-session. Current workaround:
-1. Re-authenticate via `envoy auth login`
+1. Re-authenticate on host: `claude auth login`
+2. Re-sync: `docker exec envoy envoy auth sync`
 2. Kill and respawn the sleeve
 
 Future: Token refresh hook that updates credentials without sleeve restart.
