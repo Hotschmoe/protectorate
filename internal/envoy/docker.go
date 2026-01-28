@@ -1,9 +1,11 @@
 package envoy
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/hotschmoe/protectorate/internal/protocol"
 )
 
@@ -403,7 +406,7 @@ func (d *DockerClient) detectDHF(ctx context.Context, containerID string) (*DHFI
 	return &DHFInfo{Name: "Unknown", Version: ""}, nil
 }
 
-// execCommand runs a command in a container and returns stdout
+// execCommand runs a command in a container and returns the first line of stdout
 func (d *DockerClient) execCommand(ctx context.Context, containerID string, cmd ...string) (string, error) {
 	execConfig := container.ExecOptions{
 		Cmd:          cmd,
@@ -411,38 +414,24 @@ func (d *DockerClient) execCommand(ctx context.Context, containerID string, cmd 
 		AttachStderr: true,
 	}
 
-	resp, err := d.cli.ContainerExecCreate(ctx, containerID, execConfig)
+	execID, err := d.cli.ContainerExecCreate(ctx, containerID, execConfig)
 	if err != nil {
 		return "", err
 	}
 
-	attachResp, err := d.cli.ContainerExecAttach(ctx, resp.ID, container.ExecStartOptions{})
+	attachResp, err := d.cli.ContainerExecAttach(ctx, execID.ID, container.ExecStartOptions{})
 	if err != nil {
 		return "", err
 	}
 	defer attachResp.Close()
 
-	output := make([]byte, 256)
-	n, _ := attachResp.Reader.Read(output)
-	if n == 0 {
-		return "", fmt.Errorf("no output")
+	var stdout, stderr bytes.Buffer
+	_, err = stdcopy.StdCopy(&stdout, &stderr, attachResp.Reader)
+	if err != nil {
+		return "", fmt.Errorf("failed to read exec output: %w", err)
 	}
 
-	result := string(output[:n])
-	// Strip any docker stream header bytes (first 8 bytes if present)
-	if len(result) > 8 && result[0] <= 2 {
-		result = result[8:]
-	}
-	// Trim whitespace and get first line
-	for i, c := range result {
-		if c == '\n' || c == '\r' {
-			result = result[:i]
-			break
-		}
-	}
-
-	// Check if exec failed
-	inspect, err := d.cli.ContainerExecInspect(ctx, resp.ID)
+	inspect, err := d.cli.ContainerExecInspect(ctx, execID.ID)
 	if err != nil {
 		return "", err
 	}
@@ -450,5 +439,6 @@ func (d *DockerClient) execCommand(ctx context.Context, containerID string, cmd 
 		return "", fmt.Errorf("exit code %d", inspect.ExitCode)
 	}
 
-	return result, nil
+	firstLine, _, _ := strings.Cut(stdout.String(), "\n")
+	return strings.TrimSpace(firstLine), nil
 }
