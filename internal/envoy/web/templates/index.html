@@ -18,9 +18,14 @@
         <div class="nav-right">
             <button class="btn" onclick="openEnvoyTerminal()">Terminal</button>
             <span class="cluster-badge">cluster: local</span>
-            <span id="auth-badge" class="admin-badge unauthenticated">AUTH</span>
         </div>
     </nav>
+
+    <div id="auth-warning-banner" class="auth-warning-banner hidden">
+        <span id="auth-warning-text"></span>
+        <a href="#" onclick="switchTab('doctor'); return false;">View Details</a>
+        <button class="banner-dismiss" onclick="dismissAuthBanner()">[x]</button>
+    </div>
 
     <nav class="tab-nav">
         <div class="tab active" onclick="switchTab('sleeves')">Sleeves</div>

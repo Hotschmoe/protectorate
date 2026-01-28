@@ -327,25 +327,6 @@ class TerminalConnection {
     }
 }
 
-async function checkAuth() {
-    try {
-        const resp = await fetch('/api/auth/status');
-        const data = await resp.json();
-        const badge = document.getElementById('auth-badge');
-        if (data.authenticated) {
-            badge.classList.remove('unauthenticated');
-            badge.classList.add('authenticated');
-            badge.textContent = 'ADMIN';
-        } else {
-            badge.classList.remove('authenticated');
-            badge.classList.add('unauthenticated');
-            badge.textContent = 'AUTH';
-        }
-    } catch (e) {
-        console.error('Failed to check auth:', e);
-    }
-}
-
 let sleevesCache = [];
 let hostStatsCache = null;
 let pendingSpawns = [];
@@ -1426,10 +1407,41 @@ function hideTerminalModal() {
     }
 }
 
+// Auth status check
+let authBannerDismissed = false;
+
+async function checkAuthStatus() {
+    if (authBannerDismissed) return;
+
+    try {
+        const resp = await fetch('/api/auth/check');
+        const result = await resp.json();
+        const banner = document.getElementById('auth-warning-banner');
+        const textEl = document.getElementById('auth-warning-text');
+
+        if (result.expired) {
+            textEl.textContent = 'Authentication expired - credentials need renewal';
+            banner.classList.remove('hidden');
+        } else if (result.expiring_soon) {
+            textEl.textContent = 'Authentication expiring soon - check Doctor tab for details';
+            banner.classList.remove('hidden');
+        } else {
+            banner.classList.add('hidden');
+        }
+    } catch (e) {
+        console.error('Failed to check auth status:', e);
+    }
+}
+
+function dismissAuthBanner() {
+    authBannerDismissed = true;
+    document.getElementById('auth-warning-banner').classList.add('hidden');
+}
+
 // Initialize on page load
-checkAuth();
 refreshSleeves();
 refreshHostStats();
+checkAuthStatus();
 
 setInterval(() => {
     refreshSleeves();
@@ -1438,3 +1450,8 @@ setInterval(() => {
 setInterval(() => {
     refreshHostStats();
 }, 30000);
+
+// Check auth status every 5 minutes
+setInterval(() => {
+    checkAuthStatus();
+}, 5 * 60 * 1000);

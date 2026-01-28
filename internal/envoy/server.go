@@ -34,6 +34,13 @@ func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
 	sidecar := NewSidecarClient(cfg.Docker.Network)
 	auth := NewAuthManager()
 
+	// Load auth state and perform startup check
+	if err := auth.LoadState(); err != nil {
+		// Log warning but don't fail startup
+		fmt.Printf("Warning: failed to load auth state: %v\n", err)
+	}
+	auth.StartupCheck()
+
 	if err := sleeves.RecoverSleeves(); err != nil {
 		return nil, fmt.Errorf("failed to recover sleeves: %w", err)
 	}
@@ -67,6 +74,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/config", s.handleConfig)
 	mux.HandleFunc("/api/config/", s.handleConfigKey)
 	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
+	mux.HandleFunc("/api/auth/check", s.handleAuthCheck)
 	mux.HandleFunc("/api/auth/sync", s.handleAuthSync)
 	mux.HandleFunc("/api/auth/", s.handleAuthProvider)
 	mux.HandleFunc("/api/doctor", s.handleDoctor)

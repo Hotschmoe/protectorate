@@ -3,25 +3,204 @@ package envoy
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/hotschmoe/protectorate/internal/protocol"
 )
 
 const (
 	credsBasePath = "/home/agent/.creds"
+	authStatePath = "/home/agent/.creds/.auth-state.json"
+	claudeExpiry  = 365 * 24 * time.Hour // 1 year
+	warnThreshold = 24 * time.Hour
 )
 
 // AuthManager handles credential storage and authentication state
 type AuthManager struct {
-	mu sync.RWMutex
+	mu    sync.RWMutex
+	state *protocol.AuthState
 }
 
 // NewAuthManager creates a new auth manager
 func NewAuthManager() *AuthManager {
-	return &AuthManager{}
+	am := &AuthManager{
+		state: &protocol.AuthState{
+			Version:   1,
+			Providers: make(map[string]protocol.ProviderAuthState),
+		},
+	}
+	return am
+}
+
+// LoadState reads auth state from disk
+func (m *AuthManager) LoadState() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	data, err := os.ReadFile(authStatePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to read auth state: %w", err)
+	}
+
+	var state protocol.AuthState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return fmt.Errorf("failed to parse auth state: %w", err)
+	}
+
+	m.state = &state
+	return nil
+}
+
+// SaveState writes auth state to disk
+func (m *AuthManager) SaveState() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.saveStateLocked()
+}
+
+func (m *AuthManager) saveStateLocked() error {
+	if err := os.MkdirAll(filepath.Dir(authStatePath), 0700); err != nil {
+		return fmt.Errorf("failed to create state directory: %w", err)
+	}
+
+	data, err := json.MarshalIndent(m.state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal auth state: %w", err)
+	}
+
+	if err := os.WriteFile(authStatePath, data, 0600); err != nil {
+		return fmt.Errorf("failed to write auth state: %w", err)
+	}
+
+	return nil
+}
+
+// RecordSync updates state after a successful sync
+func (m *AuthManager) RecordSync(provider, method string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.recordSyncLocked(provider, method)
+}
+
+// recordSyncLocked updates state without acquiring lock (caller must hold lock)
+func (m *AuthManager) recordSyncLocked(provider, method string) error {
+	now := time.Now()
+	providerState := protocol.ProviderAuthState{
+		SyncedAt: now,
+		Method:   method,
+	}
+
+	// Set expiration based on provider
+	switch protocol.AuthProvider(provider) {
+	case protocol.AuthProviderClaude:
+		providerState.ExpiresAt = now.Add(claudeExpiry)
+	// Gemini, Git use API keys/SSH - no expiration
+	// Codex uses auto-refresh OAuth - no warning needed
+	}
+
+	m.state.Providers[provider] = providerState
+	return m.saveStateLocked()
+}
+
+// Check validates all providers and returns expiration status
+func (m *AuthManager) Check() *protocol.AuthCheckResult {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := &protocol.AuthCheckResult{
+		Valid:     true,
+		Providers: make(map[protocol.AuthProvider]*protocol.AuthCheckInfo),
+	}
+
+	status := m.getStatusLocked()
+	now := time.Now()
+
+	for provider, providerStatus := range status.Providers {
+		info := &protocol.AuthCheckInfo{}
+
+		if !providerStatus.Authenticated {
+			info.Status = "missing"
+			info.Message = "not authenticated"
+			result.Valid = false
+			result.Expired = true
+		} else {
+			// Check expiration from state
+			if stateInfo, ok := m.state.Providers[string(provider)]; ok && !stateInfo.ExpiresAt.IsZero() {
+				if now.After(stateInfo.ExpiresAt) {
+					info.Status = "expired"
+					info.ExpiresAt = stateInfo.ExpiresAt
+					info.Message = "credentials have expired"
+					result.Valid = false
+					result.Expired = true
+				} else if stateInfo.ExpiresAt.Sub(now) <= warnThreshold {
+					info.Status = "expiring_soon"
+					info.ExpiresAt = stateInfo.ExpiresAt
+					info.ExpiresIn = formatDuration(stateInfo.ExpiresAt.Sub(now))
+					info.Message = fmt.Sprintf("expires in %s", info.ExpiresIn)
+					result.ExpiringSoon = true
+				} else {
+					info.Status = "valid"
+					info.ExpiresAt = stateInfo.ExpiresAt
+					info.ExpiresIn = formatDuration(stateInfo.ExpiresAt.Sub(now))
+					info.Message = fmt.Sprintf("expires in %s", info.ExpiresIn)
+				}
+			} else {
+				info.Status = "valid"
+				info.Message = "authenticated"
+			}
+		}
+
+		result.Providers[provider] = info
+	}
+
+	return result
+}
+
+func formatDuration(d time.Duration) string {
+	if d < time.Hour {
+		return fmt.Sprintf("%d minutes", int(d.Minutes()))
+	}
+	if d < 24*time.Hour {
+		return fmt.Sprintf("%d hours", int(d.Hours()))
+	}
+	days := int(d.Hours() / 24)
+	if days == 1 {
+		return "1 day"
+	}
+	return fmt.Sprintf("%d days", days)
+}
+
+// GetExpirationStatus returns expiration info for a single provider
+func (m *AuthManager) GetExpirationStatus(provider protocol.AuthProvider) *protocol.AuthCheckInfo {
+	result := m.Check()
+	if info, ok := result.Providers[provider]; ok {
+		return info
+	}
+	return &protocol.AuthCheckInfo{
+		Status:  "missing",
+		Message: "provider not found",
+	}
+}
+
+// StartupCheck performs a non-blocking startup validation and logs warnings
+func (m *AuthManager) StartupCheck() {
+	go func() {
+		result := m.Check()
+		if result.Expired {
+			log.Printf("WARNING: Authentication tokens expired - run 'envoy auth check' for details")
+		} else if result.ExpiringSoon {
+			log.Printf("WARNING: Authentication tokens expiring soon - run 'envoy auth check' for details")
+		}
+	}()
 }
 
 // GetStatus returns the authentication status for all providers
@@ -29,6 +208,11 @@ func (m *AuthManager) GetStatus() *protocol.AuthStatus {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	return m.getStatusLocked()
+}
+
+// getStatusLocked returns status without acquiring lock (caller must hold lock)
+func (m *AuthManager) getStatusLocked() *protocol.AuthStatus {
 	status := &protocol.AuthStatus{
 		Providers: make(map[protocol.AuthProvider]*protocol.ProviderAuthStatus),
 	}
@@ -340,6 +524,11 @@ func (m *AuthManager) syncClaude() error {
 		if err := os.WriteFile(destPath, data, 0600); err != nil {
 			return fmt.Errorf("failed to write settings: %w", err)
 		}
+	}
+
+	// Record sync with expiration tracking
+	if err := m.recordSyncLocked("claude", "oauth"); err != nil {
+		log.Printf("Warning: failed to record sync state: %v", err)
 	}
 
 	return nil

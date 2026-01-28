@@ -8,6 +8,12 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+const (
+	exitCodeValid        = 0
+	exitCodeExpired      = 1
+	exitCodeExpiringSoon = 2
+)
+
 var authCommand = &cli.Command{
 	Name:  "auth",
 	Usage: "Manage authentication for AI providers",
@@ -110,6 +116,14 @@ var authCommand = &cli.Command{
 				return nil
 			},
 		},
+		{
+			Name:  "check",
+			Usage: "Check auth status with exit codes (0=valid, 1=expired, 2=expiring soon)",
+			Flags: []cli.Flag{
+				&cli.BoolFlag{Name: "quiet", Aliases: []string{"q"}, Usage: "Only return exit code, no output"},
+			},
+			Action: authCheckAction,
+		},
 	},
 	Action: func(c *cli.Context) error {
 		return authStatusAction(c)
@@ -151,6 +165,70 @@ func authStatusAction(c *cli.Context) error {
 		} else {
 			fmt.Printf("%-8s not authenticated\n", provider+":")
 		}
+	}
+
+	return nil
+}
+
+func authCheckAction(c *cli.Context) error {
+	client := NewEnvoyClient(c.String("server"))
+	out := NewOutputWriter(c.Bool("json"), os.Stdout)
+	quiet := c.Bool("quiet")
+
+	var result protocol.AuthCheckResult
+	if err := client.Get("/api/auth/check", &result); err != nil {
+		return cli.Exit(err.Error(), 1)
+	}
+
+	if c.Bool("json") {
+		return out.Write(result, nil)
+	}
+
+	if !quiet {
+		providers := []protocol.AuthProvider{
+			protocol.AuthProviderClaude,
+			protocol.AuthProviderGemini,
+			protocol.AuthProviderCodex,
+			protocol.AuthProviderGit,
+		}
+
+		for _, provider := range providers {
+			info, ok := result.Providers[provider]
+			if !ok {
+				continue
+			}
+
+			statusIcon := "[*]"
+			switch info.Status {
+			case "expired", "missing":
+				statusIcon = "[x]"
+			case "expiring_soon":
+				statusIcon = "[!]"
+			}
+
+			message := info.Message
+			if message == "" {
+				message = info.Status
+			}
+
+			fmt.Printf("%s %-8s %s\n", statusIcon, provider+":", message)
+		}
+
+		fmt.Println()
+		if result.Expired {
+			fmt.Println("Status: EXPIRED - credentials need renewal")
+		} else if result.ExpiringSoon {
+			fmt.Println("Status: WARNING - credentials expiring soon")
+		} else {
+			fmt.Println("Status: OK - all credentials valid")
+		}
+	}
+
+	// Return appropriate exit code
+	if result.Expired {
+		os.Exit(exitCodeExpired)
+	} else if result.ExpiringSoon {
+		os.Exit(exitCodeExpiringSoon)
 	}
 
 	return nil

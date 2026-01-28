@@ -47,3 +47,32 @@ type AuthRevokeResult struct {
 	Message  string `json:"message,omitempty"`
 	Error    string `json:"error,omitempty"`
 }
+
+// AuthState tracks expiration info persisted to .auth-state.json
+type AuthState struct {
+	Version   int                          `json:"version"`
+	Providers map[string]ProviderAuthState `json:"providers"`
+}
+
+// ProviderAuthState tracks sync and expiration times for a provider
+type ProviderAuthState struct {
+	SyncedAt  time.Time `json:"synced_at"`
+	ExpiresAt time.Time `json:"expires_at,omitempty"`
+	Method    string    `json:"method"`
+}
+
+// AuthCheckResult is the result of an auth check operation
+type AuthCheckResult struct {
+	Valid        bool                           `json:"valid"`
+	ExpiringSoon bool                           `json:"expiring_soon"`
+	Expired      bool                           `json:"expired"`
+	Providers    map[AuthProvider]*AuthCheckInfo `json:"providers"`
+}
+
+// AuthCheckInfo provides status details for a single provider
+type AuthCheckInfo struct {
+	Status    string    `json:"status"` // "valid", "expiring_soon", "expired", "missing"
+	ExpiresAt time.Time `json:"expires_at,omitempty"`
+	ExpiresIn string    `json:"expires_in,omitempty"`
+	Message   string    `json:"message,omitempty"`
+}

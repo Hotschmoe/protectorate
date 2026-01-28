@@ -101,24 +101,6 @@ body {
     color: var(--text-secondary);
 }
 
-.admin-badge {
-    background: var(--cyan-subtle);
-    color: var(--cyan-glow);
-    padding: 0.25rem 0.75rem;
-    border-radius: 4px;
-    font-size: var(--text-sm);
-    font-weight: 600;
-}
-
-.admin-badge.authenticated {
-    background: rgba(0, 245, 255, 0.2);
-}
-
-.admin-badge.unauthenticated {
-    background: rgba(255, 0, 85, 0.2);
-    color: var(--magenta-glow);
-}
-
 /* Tab Navigation */
 .tab-nav {
     background: var(--bg-surface);
@@ -1113,4 +1095,44 @@ td { color: var(--text-primary); }
     text-transform: uppercase;
     letter-spacing: 0.1em;
     margin-bottom: 1rem;
+}
+
+/* Auth Warning Banner */
+.auth-warning-banner {
+    background: rgba(255, 170, 0, 0.15);
+    border-bottom: 1px solid var(--amber-glow);
+    padding: 0.5rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    color: var(--amber-glow);
+    font-size: var(--text-sm);
+}
+
+.auth-warning-banner.hidden {
+    display: none;
+}
+
+.auth-warning-banner a {
+    color: var(--cyan-glow);
+    text-decoration: none;
+}
+
+.auth-warning-banner a:hover {
+    text-decoration: underline;
+}
+
+.banner-dismiss {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    padding: 0.25rem;
+}
+
+.banner-dismiss:hover {
+    color: var(--text-primary);
 }
