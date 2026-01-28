@@ -10,6 +10,56 @@ This document specifies a new authentication architecture for Protectorate that:
 
 ---
 
+## Source of Truth: HTTP API
+
+Following the CLI-HTTP ethos (`docs/cli_http_ethos.md`), the HTTP daemon is the single source of truth:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           ENVOY CONTAINER                               │
+│                                                                         │
+│  ┌──────────┐      HTTP       ┌──────────────┐      ┌───────────────┐  │
+│  │ envoy    │ ─────────────>  │ envoy serve  │ <──> │ Named Volumes │  │
+│  │ auth     │                 │ (daemon)     │      │ - agent-creds │  │
+│  │ CLI      │                 │              │      │ - workspaces  │  │
+│  └──────────┘                 │ Source of    │      └───────────────┘  │
+│       ^                       │ Truth        │             ^           │
+│       │                       └──────────────┘             │           │
+│       │                             ^                      │           │
+│  Poe uses CLI                       │ HTTP            Volume I/O       │
+│                                     │                      │           │
+│                              ┌──────────────┐              │           │
+│                              │   Web UI     │──────────────┘           │
+│                              │   (human)    │                          │
+│                              └──────────────┘                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key principle**: CLI commands are thin wrappers around HTTP endpoints. All state mutations go through the daemon.
+
+```bash
+# These are equivalent:
+envoy auth status --json
+curl http://localhost:7470/api/auth/status
+
+# Auth operations go through HTTP
+envoy auth claude    # POST /api/auth/claude/login
+envoy auth revoke    # DELETE /api/auth/claude
+```
+
+### Consistency Across Domains
+
+| Domain | CLI | HTTP (Source of Truth) | Storage |
+|--------|-----|------------------------|---------|
+| Sleeves | `envoy spawn/kill/status` | `/api/sleeves/*` | Docker daemon |
+| Auth | `envoy auth` | `/api/auth/*` | `agent-creds` volume |
+| Workspaces | `envoy clone/pull/push` | `/api/workspaces/*` | `agent-workspaces` volume |
+| System | `envoy doctor/stats` | `/api/system/*` | Live queries |
+
+**Same pattern everywhere**: CLI wraps HTTP, daemon owns state, volumes persist data.
+
+---
+
 ## Current State Analysis
 
 ### Problems with Host-Mounted Credentials
@@ -372,70 +422,95 @@ mounts = append(mounts, mount.Mount{
 
 ### 3. Auth Command Implementation
 
-**New file: `cmd/envoy/auth.go`**
+Following CLI-HTTP ethos: CLI is a thin wrapper, daemon does the work.
+
+**CLI side: `cmd/envoy/auth.go`**
 
 ```go
 package main
 
-import (
-    "fmt"
-    "os"
-    "os/exec"
-
-    "github.com/spf13/cobra"
-)
-
-var authCmd = &cobra.Command{
-    Use:   "auth [provider]",
-    Short: "Authenticate AI providers",
-    Long:  `Authenticate Claude Code, Gemini CLI, or Codex for use in sleeves.`,
-    Run:   runAuth,
+// CLI is thin - just calls HTTP endpoints
+func runAuthStatus(cmd *cobra.Command, args []string) {
+    // GET /api/auth/status
+    resp, err := http.Get(envoyURL + "/api/auth/status")
+    // ... format and print response
 }
 
-func runAuth(cmd *cobra.Command, args []string) {
-    if len(args) == 0 {
-        // Interactive mode - show menu
-        showAuthMenu()
-        return
-    }
+func runAuthLogin(cmd *cobra.Command, args []string) {
+    provider := args[0]  // "claude", "gemini", "codex"
 
+    // POST /api/auth/{provider}/login
+    // Returns OAuth URL or prompts for token
+    resp, err := http.Post(envoyURL + "/api/auth/" + provider + "/login", ...)
+
+    // Handle interactive flow (open browser, wait for callback, etc.)
+}
+
+func runAuthRevoke(cmd *cobra.Command, args []string) {
     provider := args[0]
+
+    // DELETE /api/auth/{provider}
+    req, _ := http.NewRequest("DELETE", envoyURL + "/api/auth/" + provider, nil)
+    // ...
+}
+```
+
+**Daemon side: `internal/envoy/auth_handlers.go`**
+
+```go
+package envoy
+
+// POST /api/auth/{provider}/login
+func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
+    provider := chi.URLParam(r, "provider")
+
     switch provider {
     case "claude":
-        authClaude()
+        s.authClaude(w, r)
     case "gemini":
-        authGemini()
+        s.authGemini(w, r)
     case "codex":
-        authCodex()
-    case "status":
-        showAuthStatus()
-    default:
-        fmt.Fprintf(os.Stderr, "Unknown provider: %s\n", provider)
-        os.Exit(1)
+        s.authCodex(w, r)
     }
 }
 
-func authClaude() {
-    // Option 1: Use claude setup-token for long-lived token
-    // Option 2: Run claude auth login and let it write to ~/.creds/claude/
-
+func (s *Server) authClaude(w http.ResponseWriter, r *http.Request) {
     credsDir := "/home/agent/.creds/claude"
     os.MkdirAll(credsDir, 0700)
 
-    // Set CLAUDE_CONFIG_DIR to redirect credential storage
-    os.Setenv("CLAUDE_CONFIG_DIR", credsDir)
+    // Option 1: Accept token directly (non-interactive)
+    if token := r.FormValue("token"); token != "" {
+        // Write token to credentials file
+        s.writeClaudeToken(credsDir, token)
+        s.updateAuthState("claude", true)
+        json.NewEncoder(w).Encode(map[string]string{"status": "authenticated"})
+        return
+    }
 
-    // Run claude auth
-    cmd := exec.Command("claude", "auth", "login")
-    cmd.Stdin = os.Stdin
-    cmd.Stdout = os.Stdout
-    cmd.Stderr = os.Stderr
-    cmd.Run()
+    // Option 2: Return OAuth URL for interactive flow
+    oauthURL := s.getClaudeOAuthURL()
+    json.NewEncoder(w).Encode(map[string]string{
+        "status": "pending",
+        "oauth_url": oauthURL,
+        "callback": "/api/auth/claude/callback",
+    })
+}
 
-    // Update auth state
-    updateAuthState("claude", true)
+// GET /api/auth/status
+func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
+    state := s.loadAuthState()
+    json.NewEncoder(w).Encode(state)
 }
 ```
+
+**HTTP Endpoints:**
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/auth/status` | GET | Get auth status for all providers |
+| `/api/auth/{provider}/login` | POST | Initiate login flow |
+| `/api/auth/{provider}/callback` | GET | OAuth callback handler |
+| `/api/auth/{provider}` | DELETE | Revoke credentials |
 
 ---
 
@@ -580,22 +655,145 @@ auth:
 
 ---
 
-## Workspace Considerations
+## Workspace Isolation
 
-The same pattern applies to workspaces:
+### Design: Envoy Owns Workspaces
+
+Workspaces live entirely within the Envoy container via named volume. **No host filesystem access for workspaces.**
 
 ```
-Current:  Host bind mount  -> Sleeves
-Proposed: Named volume     -> Envoy -> Sleeves
+                           ENVOY CONTAINER
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│  Named Volume: agent-workspaces                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  /home/agent/workspaces/                                        │   │
+│  │  ├── project-alpha/        (git repo, cloned by envoy)          │   │
+│  │  ├── project-beta/         (git repo, cloned by envoy)          │   │
+│  │  └── project-gamma/        (git repo, cloned by envoy)          │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│       │                                                                 │
+│       │ envoy clone https://github.com/user/repo                       │
+│       │ envoy pull project-alpha                                       │
+│       │ envoy push project-alpha                                       │
+│       │                                                                 │
+└───────┼─────────────────────────────────────────────────────────────────┘
+        │
+        │ Mount subdirectory (read-write)
+        │
+        v
+   ┌─────────────────┐
+   │    Sleeve       │
+   │                 │
+   │ /home/agent/    │
+   │   workspace/    │  <-- Single workspace mounted
+   │   (project-     │
+   │    alpha/)      │
+   └─────────────────┘
 ```
 
-**Benefits:**
-- Envoy can manage workspace lifecycle
-- Clone repos inside envoy, sleeves just mount
-- Easy to snapshot/backup entire workspace volume
+### Git Operations: Inside Envoy Only
 
-**Implementation:**
+All git operations happen inside the envoy container via HTTP API. CLI wraps HTTP (consistent with ethos):
+
+```bash
+# CLI commands (thin wrappers around HTTP)
+envoy clone <url> [--name <workspace>]   # POST /api/workspaces
+envoy pull <workspace>                    # POST /api/workspaces/{name}/pull
+envoy push <workspace>                    # POST /api/workspaces/{name}/push
+envoy fetch [workspace]                   # POST /api/workspaces/{name}/fetch
+envoy branches <workspace>                # GET /api/workspaces/{name}/branches
+envoy checkout <workspace> <branch>       # POST /api/workspaces/{name}/checkout
+envoy workspaces [--json]                 # GET /api/workspaces
+```
+
+**Why envoy handles git, not sleeves or host:**
+1. **Host isolation**: No host filesystem access required
+2. **Credential isolation**: Git SSH keys / tokens stay in envoy, not exposed to sleeves
+3. **Conflict prevention**: Envoy can coordinate pushes across sleeves
+4. **Audit trail**: All git operations logged in one place
+5. **Sleeves are ephemeral**: Sleeves may die mid-push; envoy is persistent
+6. **Platform agnostic**: Works in VM, cloud, anywhere Docker runs
+
+### Sleeve Workspace Mount
+
+When spawning a sleeve, envoy mounts a single workspace subdirectory:
+
+```go
+// SleeveManager.Spawn()
+mounts = append(mounts, mount.Mount{
+    Type:     mount.TypeVolume,
+    Source:   "agent-workspaces",
+    Target:   "/home/agent/workspace",
+    ReadOnly: false,  // Sleeves can modify code
+    VolumeOptions: &mount.VolumeOptions{
+        Subpath: workspaceName,  // e.g., "project-alpha"
+    },
+})
+```
+
+**Note**: Docker volume subpath requires Docker 20.10+. Alternative approach: envoy daemon can bind-mount from its own filesystem view of the volume.
+
+### SSH Keys for Git
+
+Git SSH keys are stored in the credentials volume:
+
+```
+/home/agent/.creds/
+├── git/
+│   ├── id_ed25519           # SSH private key
+│   ├── id_ed25519.pub       # SSH public key
+│   └── known_hosts          # GitHub, GitLab, etc.
+├── claude/
+├── gemini/
+└── codex/
+```
+
+Configured via:
+```bash
+envoy auth git                           # Generate or import SSH key
+envoy auth git --import ~/.ssh/id_rsa   # Import existing key (one-time from host)
+```
+
+---
+
+## Host Isolation Model
+
+### What Envoy DOES Access on Host
+
+| Resource | Access | Purpose |
+|----------|--------|---------|
+| `/var/run/docker.sock` | Read-Write | Spawn/manage sleeves |
+| `/proc` (optional) | Read-Only | Hardware stats (CPU, memory) for status |
+| Network ports (7470) | Expose | WebUI and API access |
+
+### What Envoy Does NOT Access on Host
+
+| Resource | Status | Alternative |
+|----------|--------|-------------|
+| `~/.claude/` | REMOVED | Use `agent-creds` volume |
+| `~/.config/` | REMOVED | Use `agent-creds` volume |
+| `~/workspaces/` | REMOVED | Use `agent-workspaces` volume |
+| `~/.ssh/` | REMOVED | Import keys via `envoy auth git --import` |
+| `~/.gitconfig` | REMOVED | Configure git inside envoy |
+
+### Volume Summary
+
 ```yaml
+# docker-compose.yaml
+services:
+  envoy:
+    volumes:
+      # Required: Docker control
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # Required: Persistent data (named volumes)
+      - agent-creds:/home/agent/.creds:rw
+      - agent-workspaces:/home/agent/workspaces:rw
+
+      # Optional: Hardware stats
+      - /proc:/host/proc:ro
+
 volumes:
   agent-creds:
     name: agent-creds
@@ -603,7 +801,21 @@ volumes:
     name: agent-workspaces
 ```
 
-This keeps Protectorate fully isolated from host filesystem.
+### Platform Portability
+
+This model enables:
+
+```bash
+# Local machine
+docker run -d -v /var/run/docker.sock:/var/run/docker.sock \
+  -v agent-creds:/home/agent/.creds \
+  -v agent-workspaces:/home/agent/workspaces \
+  -p 7470:7470 protectorate/envoy
+
+# VM (same command)
+# Cloud container service (same volumes, different socket handling)
+# Docker-in-Docker (nested, same pattern)
+```
 
 ---
 
