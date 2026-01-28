@@ -10,13 +10,12 @@ This document describes the one-line installer for Protectorate.
 curl -fsSL https://raw.githubusercontent.com/hotschmoe/protectorate/master/install.sh | bash
 ```
 
-User runs one command, answers prompts, and ends up with:
-- Docker installed (if needed)
-- Claude Code installed and authenticated
-- Protectorate repo cloned (latest release)
-- Pre-built container images pulled from ghcr.io
+User runs one command and ends up with:
+- Docker verified (must be pre-installed)
+- Protectorate container images pulled from ghcr.io
+- Named volumes created for persistent data
 - Envoy container running
-- Ready to spawn sleeves
+- Ready to authenticate and spawn sleeves
 
 ---
 
@@ -31,65 +30,21 @@ User runs one command, answers prompts, and ends up with:
     No   |   Yes
     v    |    |
 +--------+    |
+| Error:      |
 | Install     |
-| Docker      |
-+--------+----+
+| Docker first|
++-------------+
          |
          v
 +------------------+
-| Check Claude CLI |
-| installed?       |
-+--------+---------+
-         |
-    No   |   Yes
-    v    |    |
-+--------+    |
-| Install     |
-| Claude CLI  |
-+--------+----+
-         |
-         v
-+------------------+
-| Check Claude     |
-| authenticated?   |
-+--------+---------+
-         |
-    No   |   Yes
-    v    |    |
-+--------+    |
-| Run claude  |
-| login flow  |
-+--------+----+
-         |
-         v
-+------------------+
-| Generate long-   |
-| lived token      |
-| (setup-token)    |
+| Create           |
+| ~/protectorate   |
 +--------+---------+
          |
          v
 +------------------+
-| Get latest       |
-| release tag      |
-+--------+---------+
-         |
-         v
-+------------------+
-| Clone repo at    |
-| release tag      |
-+--------+---------+
-         |
-         v
-+------------------+
-| Setup onboarding |
-| flag             |
-+--------+---------+
-         |
-         v
-+------------------+
-| Create .env      |
-| with token       |
+| Download         |
+| docker-compose   |
 +--------+---------+
          |
          v
@@ -101,13 +56,97 @@ User runs one command, answers prompts, and ends up with:
          |
          v
 +------------------+
-| Start Envoy      |
-| (docker compose) |
+| docker compose   |
+| up -d            |
++--------+---------+
+         |
+         v
 +------------------+
+| Wait for health  |
+| check            |
++--------+---------+
          |
          v
     [Ready!]
+
+    Open http://localhost:7470
+    Run: envoy auth login claude --token <TOKEN>
 ```
+
+---
+
+## Post-Install Authentication
+
+After installation, users authenticate via the envoy CLI or web UI:
+
+```
++------------------+
+| User opens       |
+| localhost:7470   |
++--------+---------+
+         |
+         v
++------------------+
+| Check Doctor tab |
+| for auth status  |
++--------+---------+
+         |
+         v
++------------------+
+| Get token from   |
+| claude.ai or     |
+| claude auth      |
++--------+---------+
+         |
+         v
++------------------+
+| envoy auth login |
+| claude --token   |
++--------+---------+
+         |
+         v
++------------------+
+| Credentials      |
+| stored in        |
+| agent-creds vol  |
++--------+---------+
+         |
+         v
+    [Authenticated!]
+
+    Clone repos and spawn sleeves
+```
+
+---
+
+## Data Architecture
+
+All persistent data lives in Docker named volumes:
+
+```
+Named Volumes (managed by Docker)
++------------------------------------------+
+|                                          |
+|  agent-config     /home/agent/.config    |
+|  (envoy settings, future YAML config)    |
+|                                          |
+|  agent-creds      /home/agent/.creds     |
+|  +-- claude/credentials.json             |
+|  +-- gemini/credentials.json             |
+|  +-- codex/auth.json                     |
+|  +-- git/id_ed25519, known_hosts         |
+|                                          |
+|  agent-workspaces /home/agent/workspaces |
+|  +-- repo-1/                             |
+|  +-- repo-2/                             |
+|  +-- ...                                 |
+|                                          |
++------------------------------------------+
+```
+
+Sleeves mount these volumes:
+- Workspace: volume subpath for isolation
+- Credentials: read-only for security
 
 ---
 
@@ -116,14 +155,14 @@ User runs one command, answers prompts, and ends up with:
 When a version is tagged, GitHub Actions builds and pushes images:
 
 ```
-git tag v0.1.0 && git push --tags
+git tag v1.0.0 && git push --tags
          |
          v
 GitHub Actions triggers
          |
-         +---> Build ghcr.io/hotschmoe/protectorate-base:v0.1.0
-         +---> Build ghcr.io/hotschmoe/protectorate-envoy:v0.1.0
-         +---> Build ghcr.io/hotschmoe/protectorate-sleeve:v0.1.0
+         +---> Build ghcr.io/hotschmoe/protectorate-base:v1.0.0
+         +---> Build ghcr.io/hotschmoe/protectorate-envoy:v1.0.0
+         +---> Build ghcr.io/hotschmoe/protectorate-sleeve:v1.0.0
          +---> Tag all as :latest
 ```
 
@@ -134,76 +173,92 @@ Users pull pre-built images - no local building required.
 ## Uninstall
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hotschmoe/protectorate/master/uninstall.sh | bash
+cd ~/protectorate
+docker compose down -v  # -v removes volumes (data loss!)
+```
+
+To preserve data but stop services:
+```bash
+docker compose down  # keeps volumes
 ```
 
 Removes:
 - All sleeve containers
 - Envoy container
 - Raven network
-- Optionally: container images
-- Optionally: ~/protectorate directory
+- With `-v`: all named volumes (credentials, workspaces)
 
 Does NOT remove:
-- Docker (may be used by other apps)
-- Claude CLI (may be used standalone)
-- ~/.claude/ credentials
+- Docker
+- ~/protectorate directory
+- Container images (use `docker image prune`)
 
 ---
 
 ## Current Implementation
 
-### install.sh
+### install.sh (~60 lines)
 
-Located at repo root. Key functions:
+Simple installer that:
+1. Verifies Docker is installed and running
+2. Creates ~/protectorate directory
+3. Downloads docker-compose.yaml
+4. Pulls container images
+5. Starts envoy via docker compose
+6. Waits for health check
 
-| Function | Purpose |
-|----------|---------|
-| `check_docker` | Install Docker if missing, handle sudo/group issues |
-| `check_claude` | Install Claude CLI if missing |
-| `check_claude_auth` | Check for existing credentials |
-| `claude_login` | Interactive OAuth login |
-| `generate_token` | Generate long-lived OAuth token (1 year) |
-| `get_latest_release` | Query GitHub API for latest release tag |
-| `setup_repo` | Clone repo at specific tag |
-| `setup_onboarding` | Set hasCompletedOnboarding flag |
-| `create_env` | Generate .env file with token |
-| `prompt_optional_vars` | Ask for optional API keys |
-| `pull_images` | Pull pre-built images from ghcr.io |
-| `start_envoy` | Start envoy via docker compose |
-
-### uninstall.sh
-
-Located at repo root. Stops containers, removes network, prompts for image/directory removal.
-
-### .github/workflows/release.yaml
-
-Triggered by version tags (v*). Builds and pushes:
-- protectorate-base (internal dependency)
-- protectorate-envoy
-- protectorate-sleeve
+No configuration files, tokens, or complex setup required.
 
 ### docker-compose.yaml
 
-Production compose file. Uses pre-built ghcr.io images:
+Production compose file with named volumes:
+
 ```yaml
-image: ghcr.io/hotschmoe/protectorate-envoy:latest
+services:
+  envoy:
+    image: ghcr.io/hotschmoe/protectorate-envoy:latest
+    container_name: envoy
+    ports:
+      - "7470:7470"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - agent-config:/home/agent/.config
+      - agent-creds:/home/agent/.creds
+      - agent-workspaces:/home/agent/workspaces
+      - /proc:/host/proc:ro
+    networks:
+      - raven
+    restart: unless-stopped
+
+networks:
+  raven:
+    name: raven
+
+volumes:
+  agent-config:
+  agent-creds:
+  agent-workspaces:
 ```
 
-### docker-compose.dev.yaml
+### Auth System
 
-Development compose file. Uses local base image + volume-mounted binary for fast iteration.
+Credentials managed via CLI or HTTP API:
 
-### configs/envoy.yaml
+| Command | Purpose |
+|---------|---------|
+| `envoy auth` | Show auth status for all providers |
+| `envoy auth login claude --token TOKEN` | Store Claude credentials |
+| `envoy auth login gemini --token KEY` | Store Gemini API key |
+| `envoy auth revoke claude` | Remove Claude credentials |
 
-Envoy configuration. Uses env var with default for sleeve image:
-```yaml
-sleeve_image: ${SLEEVE_IMAGE:-ghcr.io/hotschmoe/protectorate-sleeve:latest}
-```
+### Config System
 
-### .env.example
+Configuration via CLI or HTTP API:
 
-Documents all environment variables.
+| Command | Purpose |
+|---------|---------|
+| `envoy config` | Show all configuration |
+| `envoy config get sleeves.max` | Get specific value |
 
 ---
 
@@ -212,11 +267,11 @@ Documents all environment variables.
 | Question | Decision |
 |----------|----------|
 | Install location | Always `~/protectorate` |
-| Version selection | Always latest release (queries GitHub API) |
-| Image registry | ghcr.io/hotschmoe (public, no auth needed) |
-| Compose files | Two: production (ghcr.io) and dev (local build) |
-| Config source | envoy.yaml with env var overrides |
-| Uninstall script | Yes, provided |
+| Data persistence | Docker named volumes |
+| Authentication | Post-install via `envoy auth` |
+| Configuration | Environment vars + `envoy config` |
+| Image registry | ghcr.io/hotschmoe (public) |
+| Container user | `agent` (UID 1000) |
 
 ---
 
@@ -224,35 +279,25 @@ Documents all environment variables.
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `install.sh` | Main installer script | DONE |
-| `uninstall.sh` | Uninstaller script | DONE |
+| `install.sh` | Simple installer (~60 lines) | DONE |
+| `docker-compose.yaml` | Production compose with named volumes | DONE |
+| `docker-compose.dev.yaml` | Development compose | DONE |
 | `.github/workflows/release.yaml` | GitHub Actions for image builds | DONE |
-| `.env.example` | Environment variable documentation | DONE |
-| `docker-compose.yaml` | Production compose (ghcr.io images) | DONE |
-| `docker-compose.dev.yaml` | Development compose (local build) | DONE |
-| `configs/envoy.yaml` | Envoy configuration | DONE |
 
 ---
 
-## Future Improvements
+## Credential Symlinks
 
-See `docs/CONFIG_TODO.md` for full roadmap. Key items:
+Inside containers, CLI tools expect credentials in specific locations. The entrypoints create symlinks:
 
-**Short-term:**
-- [ ] `--version` flag to install specific version
-- [ ] `--dry-run` flag
-- [ ] Better error messages
+```bash
+~/.claude      -> ~/.creds/claude      # Claude Code
+~/.config/gemini -> ~/.creds/gemini    # Gemini CLI
+~/.codex       -> ~/.creds/codex       # Codex CLI
+~/.ssh         -> ~/.creds/git         # Git SSH keys
+```
 
-**Medium-term:**
-- [ ] macOS support
-- [ ] WSL2 support
-- [ ] `protectorate` CLI wrapper
-- [ ] Systemd integration
-
-**Long-term:**
-- [ ] TUI installer (gum/whiptail)
-- [ ] Custom domain (protectorate.dev/install.sh)
-- [ ] Auto-updates
+This allows each CLI tool to find credentials in its expected location while we store everything centrally in `.creds/`.
 
 ---
 
@@ -260,12 +305,28 @@ See `docs/CONFIG_TODO.md` for full roadmap. Key items:
 
 1. **Piping to bash:** Standard practice, users can review with `curl ... | less` first
 
-2. **Token storage:** `.env` contains sensitive token
-   - In `.gitignore`
-   - User warned not to commit
+2. **Credential storage:** Stored in Docker named volume
+   - Not accessible from host filesystem directly
+   - Encrypted at rest if Docker uses encrypted storage driver
+   - Sleeves get read-only access
 
-3. **Docker group:** Adding user to docker group grants root-equivalent access
-   - Necessary for container management
-   - Alternative: rootless docker (more complex)
+3. **Docker socket:** Envoy has Docker socket access
+   - Required for container management
+   - Standard for orchestration tools
 
-4. **Public images:** ghcr.io packages are public, no auth needed to pull
+4. **Named volumes:** Data persists across container restarts
+   - Use `docker compose down -v` to fully remove
+   - Volumes survive image updates
+
+---
+
+## Comparison: Old vs New
+
+| Aspect | Old (v0.x) | New (v1.0) |
+|--------|------------|------------|
+| Install script | ~450 lines | ~60 lines |
+| Config files | .env, .env.example | None required |
+| Auth setup | During install | Post-install CLI |
+| Data storage | Host bind mounts | Named volumes |
+| Container user | claude | agent |
+| Credential paths | Host paths in .env | Named volume |
