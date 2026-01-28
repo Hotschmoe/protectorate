@@ -275,12 +275,13 @@ func (m *SleeveManager) RecoverSleeves() error {
 
 		containerName := "sleeve-" + name
 
-		status := "unknown"
-		if c.State == "running" {
+		var status string
+		switch c.State {
+		case "running":
 			status = "running"
-		} else if c.State == "exited" {
+		case "exited":
 			status = "stopped"
-		} else {
+		default:
 			status = c.State
 		}
 

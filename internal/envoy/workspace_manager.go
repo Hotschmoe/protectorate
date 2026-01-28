@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -327,9 +328,8 @@ func getGitAheadBehind(wsPath, remoteBranch string) (int, int) {
 		return 0, 0
 	}
 
-	var behind, ahead int
-	fmt.Sscanf(parts[0], "%d", &behind)
-	fmt.Sscanf(parts[1], "%d", &ahead)
+	behind, _ := strconv.Atoi(parts[0])
+	ahead, _ := strconv.Atoi(parts[1])
 	return ahead, behind
 }
 
@@ -377,8 +377,7 @@ func getWorkspaceSize(wsPath string) int64 {
 	if len(parts) == 0 {
 		return 0
 	}
-	var size int64
-	fmt.Sscanf(parts[0], "%d", &size)
+	size, _ := strconv.ParseInt(parts[0], 10, 64)
 	return size
 }
 

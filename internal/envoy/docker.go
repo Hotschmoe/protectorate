@@ -316,10 +316,11 @@ func (d *DockerClient) GetContainerStats(ctx context.Context, containerID string
 		return nil, fmt.Errorf("failed to decode stats: %w", err)
 	}
 
-	result := &protocol.ContainerResourceStats{}
+	result := &protocol.ContainerResourceStats{
+		MemoryUsedBytes:  stats.MemoryStats.Usage,
+		MemoryLimitBytes: stats.MemoryStats.Limit,
+	}
 
-	result.MemoryUsedBytes = stats.MemoryStats.Usage
-	result.MemoryLimitBytes = stats.MemoryStats.Limit
 	if result.MemoryLimitBytes > 0 {
 		result.MemoryPercent = float64(result.MemoryUsedBytes) / float64(result.MemoryLimitBytes) * 100
 	}

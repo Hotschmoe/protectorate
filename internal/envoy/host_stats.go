@@ -128,7 +128,7 @@ func (h *HostStatsCollector) GetCPUStats() *protocol.CPUStats {
 			continue
 		}
 
-		if fields[0] == "cpu" && len(fields) >= 8 {
+		if fields[0] == "cpu" && len(fields) >= 5 {
 			current.user, _ = strconv.ParseUint(fields[1], 10, 64)
 			current.nice, _ = strconv.ParseUint(fields[2], 10, 64)
 			current.system, _ = strconv.ParseUint(fields[3], 10, 64)
@@ -145,7 +145,7 @@ func (h *HostStatsCollector) GetCPUStats() *protocol.CPUStats {
 			if len(fields) > 8 {
 				current.steal, _ = strconv.ParseUint(fields[8], 10, 64)
 			}
-		} else if strings.HasPrefix(fields[0], "cpu") && len(fields[0]) > 3 {
+		} else if strings.HasPrefix(fields[0], "cpu") {
 			threads++
 		}
 	}
