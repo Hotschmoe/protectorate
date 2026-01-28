@@ -81,19 +81,17 @@ func (s *Server) handleHostLimits(w http.ResponseWriter, r *http.Request) {
 		totalCPU = cpuStats.Threads
 	}
 
-	divisors := []int{8, 4, 2, 1}
-
-	memOptions := make([]int64, 0, len(divisors))
-	for _, div := range divisors {
-		if opt := totalMemoryMB / int64(div); opt >= 1024 {
-			memOptions = append(memOptions, opt)
+	memOptions := make([]int64, 0)
+	for _, mb := range []int64{1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072} {
+		if mb <= totalMemoryMB {
+			memOptions = append(memOptions, mb)
 		}
 	}
 
-	cpuOptions := make([]int, 0, len(divisors))
-	for _, div := range divisors {
-		if opt := totalCPU / div; opt >= 1 {
-			cpuOptions = append(cpuOptions, opt)
+	cpuOptions := make([]int, 0)
+	for _, cpu := range []int{1, 2, 4, 8, 16, 32, 64} {
+		if cpu <= totalCPU {
+			cpuOptions = append(cpuOptions, cpu)
 		}
 	}
 
