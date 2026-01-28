@@ -493,7 +493,12 @@ async function refreshSleeves() {
         }
 
         const pendingCards = pendingSpawns.map(p => renderSpawningCard(p)).join('');
-        const activeCards = sleeves.map(s => {
+        const sortedSleeves = [...sleeves].sort((a, b) => {
+            const wsA = getWorkspaceName(a.workspace).toLowerCase();
+            const wsB = getWorkspaceName(b.workspace).toLowerCase();
+            return wsA.localeCompare(wsB);
+        });
+        const activeCards = sortedSleeves.map(s => {
             const wsName = getWorkspaceName(s.workspace);
             const uptime = formatDuration(Date.now() - new Date(s.spawn_time).getTime());
             const integrity = s.integrity !== undefined ? s.integrity.toFixed(1) : 100;
@@ -620,7 +625,7 @@ async function refreshWorkspacesTable() {
         emptyState.classList.add('hidden');
 
         tbody.innerHTML = workspaces.map(ws => {
-            const branch = formatGitBranch(ws.git);
+            const branch = formatGitBranch(ws.git, ws.path);
             const gitStatus = formatGitStatus(ws.git, ws.in_use);
             const cstackStatus = formatCstackStatus(ws.cstack, ws);
             const lastCommit = formatLastCommit(ws.git);
@@ -643,8 +648,11 @@ async function refreshWorkspacesTable() {
     }
 }
 
-function formatGitBranch(git) {
+function formatGitBranch(git, wsPath) {
     if (!git) return '<span class="git-no-repo">-</span>';
+    if (switchingBranchPaths.has(wsPath)) {
+        return `<span style="color:var(--text-secondary)"><span class="inline-spinner"></span> Switching...</span>`;
+    }
     const branchClass = git.is_detached ? 'git-detached' : 'git-branch';
     const prefix = git.is_detached ? 'detached@' : '';
     return `<span class="${branchClass}">${prefix}${git.branch}</span>`;
@@ -752,6 +760,7 @@ function formatWorkspaceActions(ws) {
 }
 
 let initializingCstackPaths = new Set();
+let switchingBranchPaths = new Set();
 
 function formatCstackStatus(cstack, ws) {
     if (initializingCstackPaths.has(ws.path)) {
@@ -787,10 +796,7 @@ function formatCstackStatus(cstack, ws) {
     return parts.join(' / ');
 }
 
-let currentSwitchWsPath = '';
-
 async function showSwitchModal(wsPath, wsName) {
-    currentSwitchWsPath = wsPath;
     document.getElementById('switch-ws-name').textContent = wsName;
     document.getElementById('switch-ws-path').value = wsPath;
     document.getElementById('switch-error').classList.add('hidden');
@@ -843,19 +849,6 @@ function hideSwitchModal() {
     document.getElementById('switch-branch-modal').classList.remove('active');
     document.getElementById('switch-form').reset();
     document.getElementById('switch-error').classList.add('hidden');
-    hideSwitchLoading();
-    currentSwitchWsPath = '';
-}
-
-function showSwitchLoading(msg) {
-    document.querySelector('.switch-loading-text').textContent = msg || 'Switching branch...';
-    document.getElementById('switch-loading').classList.add('active');
-    document.getElementById('switch-submit-btn').disabled = true;
-}
-
-function hideSwitchLoading() {
-    document.getElementById('switch-loading').classList.remove('active');
-    document.getElementById('switch-submit-btn').disabled = false;
 }
 
 async function switchBranch(e) {
@@ -869,8 +862,9 @@ async function switchBranch(e) {
         return;
     }
 
-    showSwitchLoading('Switching to ' + branch + '...');
-    document.getElementById('switch-error').classList.add('hidden');
+    hideSwitchModal();
+    switchingBranchPaths.add(wsPath);
+    await refreshWorkspacesTable();
 
     try {
         const resp = await fetch(`/api/workspaces/branches?workspace=${encodeURIComponent(wsPath)}&action=switch`, {
@@ -881,19 +875,13 @@ async function switchBranch(e) {
 
         if (!resp.ok) {
             const err = await resp.text();
-            document.getElementById('switch-error').textContent = err;
-            document.getElementById('switch-error').classList.remove('hidden');
-            hideSwitchLoading();
-            return;
+            alert('Switch failed: ' + err);
         }
-
-        hideSwitchLoading();
-        hideSwitchModal();
-        refreshWorkspacesTable();
-    } catch (e) {
-        hideSwitchLoading();
-        document.getElementById('switch-error').textContent = e.message;
-        document.getElementById('switch-error').classList.remove('hidden');
+    } catch (err) {
+        alert('Switch failed: ' + err.message);
+    } finally {
+        switchingBranchPaths.delete(wsPath);
+        await refreshWorkspacesTable();
     }
 }
 
@@ -1088,17 +1076,13 @@ async function initCstack(e) {
         );
 
         const result = await resp.json();
-        initializingCstackPaths.delete(wsPath);
-
         if (!result.success && result.error && !result.error.includes('already')) {
             alert('Cstack init failed: ' + result.error);
         }
-
-        await refreshWorkspacesTable();
-
     } catch (err) {
-        initializingCstackPaths.delete(wsPath);
         alert('Cstack init failed: ' + err.message);
+    } finally {
+        initializingCstackPaths.delete(wsPath);
         await refreshWorkspacesTable();
     }
 }

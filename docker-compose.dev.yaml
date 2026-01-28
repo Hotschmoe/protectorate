@@ -66,5 +66,8 @@ networks:
 
 volumes:
   agent-config:
+    name: agent-config
   agent-creds:
+    name: agent-creds
   agent-workspaces:
+    name: agent-workspaces

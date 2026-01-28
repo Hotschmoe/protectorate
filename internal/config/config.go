@@ -19,9 +19,11 @@ type EnvoyConfig struct {
 
 // DockerConfig defines Docker-specific configuration.
 type DockerConfig struct {
-	Network       string
-	WorkspaceRoot string
-	SleeveImage   string
+	Network         string
+	WorkspaceRoot   string
+	SleeveImage     string
+	WorkspaceVolume string
+	CredsVolume     string
 }
 
 // GiteaConfig defines Gitea configuration.
@@ -91,6 +93,8 @@ func getEnvBool(key string, defaultVal bool) bool {
 //	DOCKER_NETWORK          - Docker network name (default: raven)
 //	WORKSPACE_ROOT          - Container path for workspaces (default: /home/agent/workspaces)
 //	SLEEVE_IMAGE            - Docker image for sleeves (default: ghcr.io/hotschmoe/protectorate-sleeve:latest)
+//	WORKSPACE_VOLUME        - Docker volume for workspaces (default: agent-workspaces)
+//	CREDS_VOLUME            - Docker volume for credentials (default: agent-creds)
 //
 //	GITEA_URL               - Gitea server URL (default: http://gitea:3000)
 //	GITEA_USER              - Gitea username
@@ -108,9 +112,11 @@ func LoadEnvoyConfig() *EnvoyConfig {
 		IdleThreshold: getEnvDuration("ENVOY_IDLE_THRESHOLD", 0),
 		MaxSleeves:    getEnvInt("ENVOY_MAX_SLEEVES", 10),
 		Docker: DockerConfig{
-			Network:       getEnv("DOCKER_NETWORK", "raven"),
-			WorkspaceRoot: getEnv("WORKSPACE_ROOT", "/home/agent/workspaces"),
-			SleeveImage:   getEnv("SLEEVE_IMAGE", "ghcr.io/hotschmoe/protectorate-sleeve:latest"),
+			Network:         getEnv("DOCKER_NETWORK", "raven"),
+			WorkspaceRoot:   getEnv("WORKSPACE_ROOT", "/home/agent/workspaces"),
+			SleeveImage:     getEnv("SLEEVE_IMAGE", "ghcr.io/hotschmoe/protectorate-sleeve:latest"),
+			WorkspaceVolume: getEnv("WORKSPACE_VOLUME", "agent-workspaces"),
+			CredsVolume:     getEnv("CREDS_VOLUME", "agent-creds"),
 		},
 		Gitea: GiteaConfig{
 			URL:      getEnv("GITEA_URL", "http://gitea:3000"),

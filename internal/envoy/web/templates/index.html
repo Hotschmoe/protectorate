@@ -250,7 +250,7 @@
                 <div class="form-group hidden" id="new-ws-group">
                     <label class="form-label">Workspace Name</label>
                     <input type="text" class="form-input" id="new-workspace-input"
-                           placeholder="my-project" pattern="[a-zA-Z0-9_-]+"
+                           placeholder="my-project" pattern="[a-zA-Z0-9_\-]+"
                            title="Letters, numbers, dashes, underscores only">
                 </div>
                 <div class="form-group">
@@ -307,7 +307,7 @@
                     <label class="form-label">Workspace Name (optional)</label>
                     <input type="text" class="form-input" id="clone-name-input"
                            placeholder="Auto-derived from repo URL"
-                           pattern="[a-zA-Z0-9_-]*"
+                           pattern="[a-zA-Z0-9_\-]*"
                            title="Letters, numbers, dashes, underscores only">
                 </div>
                 <div id="clone-error" class="error-text hidden"></div>
@@ -322,10 +322,6 @@
     <!-- SWITCH BRANCH MODAL -->
     <div id="switch-branch-modal" class="modal">
         <div class="modal-content">
-            <div id="switch-loading" class="spawn-loading">
-                <div class="spinner"></div>
-                <div class="switch-loading-text">Switching branch...</div>
-            </div>
             <h2 class="modal-title">SWITCH BRANCH</h2>
             <p style="margin-bottom: 1rem; color: var(--text-secondary);">Workspace: <strong id="switch-ws-name" style="color: var(--cyan-glow);"></strong></p>
             <form id="switch-form" onsubmit="switchBranch(event)">

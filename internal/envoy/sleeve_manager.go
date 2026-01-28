@@ -107,8 +107,12 @@ func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.Sleeve
 		return nil, fmt.Errorf("workspace path required")
 	}
 
-	if _, err := os.Stat(workspace); os.IsNotExist(err) {
-		return nil, fmt.Errorf("workspace %q does not exist", workspace)
+	// Ensure workspace directory exists in the volume.
+	// Docker's volume subpath feature requires the directory to exist before
+	// container creation. We create it here to handle both explicit workspace
+	// creation and direct spawn with a new workspace name.
+	if err := os.MkdirAll(workspace, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create workspace directory %q: %w", workspace, err)
 	}
 
 	name, err := m.reserveWorkspaceAndName(workspace, req.Name)
@@ -152,11 +156,10 @@ func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.Sleeve
 
 	workspaceName := m.extractWorkspaceName(workspace)
 
-	// Use named volumes for workspace and credentials
 	mounts := []mount.Mount{
 		{
 			Type:   mount.TypeVolume,
-			Source: "agent-workspaces",
+			Source: m.cfg.Docker.WorkspaceVolume,
 			Target: "/home/agent/workspace",
 			VolumeOptions: &mount.VolumeOptions{
 				Subpath: workspaceName,
@@ -164,7 +167,7 @@ func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.Sleeve
 		},
 		{
 			Type:     mount.TypeVolume,
-			Source:   "agent-creds",
+			Source:   m.cfg.Docker.CredsVolume,
 			Target:   "/home/agent/.creds",
 			ReadOnly: true,
 		},
