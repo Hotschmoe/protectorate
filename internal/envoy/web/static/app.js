@@ -348,6 +348,7 @@ async function checkAuth() {
 
 let sleevesCache = [];
 let hostStatsCache = null;
+let pendingSpawns = [];
 
 async function refreshHostStats() {
     try {
@@ -440,6 +441,12 @@ function formatSleeveResources(sleeve) {
     return { memDisplay, memPct, cpuDisplay, cpuPct };
 }
 
+function getHealthClass(integrity) {
+    if (integrity >= 80) return 'healthy';
+    if (integrity >= 50) return 'warning';
+    return 'critical';
+}
+
 function renderSpawningCard(pending) {
     const wsName = getWorkspaceName(pending.workspace);
     const displayName = pending.name || 'allocating...';
@@ -493,17 +500,8 @@ async function refreshSleeves() {
 
             const constraintLabel = s.constrained ? 'CONSTRAINED' : 'UNCONSTRAINED';
             const constraintClass = s.constrained ? 'constrained' : 'unconstrained';
-
             const { memDisplay, memPct, cpuDisplay, cpuPct } = formatSleeveResources(s);
-
-            let healthClass;
-            if (integrity >= 80) {
-                healthClass = 'healthy';
-            } else if (integrity >= 50) {
-                healthClass = 'warning';
-            } else {
-                healthClass = 'critical';
-            }
+            const healthClass = getHealthClass(integrity);
 
             return `
             <div class="sleeve-card ${healthClass}">
@@ -585,7 +583,6 @@ function updateNeedlecastSleeveList() {
 }
 
 let workspacesCache = [];
-let pendingSpawns = [];
 
 async function refreshWorkspaces() {
     try {
@@ -1288,11 +1285,16 @@ async function cloneWorkspace(e) {
     }
 }
 
+function removePendingSpawn(pendingId) {
+    pendingSpawns = pendingSpawns.filter(p => p.id !== pendingId);
+}
+
 async function spawnSleeve(e) {
     e.preventDefault();
     const mode = document.querySelector('input[name="ws-mode"]:checked').value;
     const name = document.getElementById('name-input').value;
     let workspace;
+    let pendingId = null;
 
     try {
         if (mode === 'new') {
@@ -1332,14 +1334,13 @@ async function spawnSleeve(e) {
             if (cpuLimit > 0) body.cpu_limit = cpuLimit;
         }
 
-        const pendingId = Date.now().toString();
-        const pending = {
+        pendingId = Date.now().toString();
+        pendingSpawns.push({
             id: pendingId,
             workspace: workspace,
             name: name || null,
             message: 'Spawning sleeve...'
-        };
-        pendingSpawns.push(pending);
+        });
 
         hideSpawnLoading();
         hideSpawnModal();
@@ -1351,7 +1352,7 @@ async function spawnSleeve(e) {
             body: JSON.stringify(body)
         });
 
-        pendingSpawns = pendingSpawns.filter(p => p.id !== pendingId);
+        removePendingSpawn(pendingId);
 
         if (!resp.ok) {
             const err = await resp.text();
@@ -1361,11 +1362,13 @@ async function spawnSleeve(e) {
         }
 
         refreshSleeves();
-    } catch (e) {
-        pendingSpawns = [];
+    } catch (err) {
+        if (pendingId) {
+            removePendingSpawn(pendingId);
+        }
         hideSpawnLoading();
-        console.error('Failed to spawn sleeve:', e);
-        alert('Failed to spawn sleeve: ' + e.message);
+        console.error('Failed to spawn sleeve:', err);
+        alert('Failed to spawn sleeve: ' + err.message);
         refreshSleeves();
     }
 }
