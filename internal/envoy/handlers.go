@@ -25,6 +25,20 @@ func calculateIntegrityFromCstack(stats *protocol.CstackStats) float64 {
 	return float64(stats.Closed) / float64(stats.Total) * 100.0
 }
 
+func gitErrorStatus(err error) int {
+	msg := err.Error()
+	if strings.Contains(msg, "not found") {
+		return http.StatusNotFound
+	}
+	if strings.Contains(msg, "in use") || strings.Contains(msg, "uncommitted") {
+		return http.StatusConflict
+	}
+	if strings.Contains(msg, "not a git repository") {
+		return http.StatusBadRequest
+	}
+	return http.StatusInternalServerError
+}
+
 func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	credPath := "/home/claude/.claude/.credentials.json"
 	_, err := os.Stat(credPath)
@@ -115,17 +129,16 @@ func (s *Server) handleSleeves(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 
-		// Collect container names for batch sidecar query
 		containerNames := make([]string, 0, len(sleeves))
 		for _, sleeve := range sleeves {
 			containerNames = append(containerNames, sleeve.ContainerName)
 		}
 
-		// Fetch sidecar status in parallel
 		sidecarStatuses := s.sidecar.BatchGetStatus(containerNames)
 
 		for _, sleeve := range sleeves {
-			// Get DHF and integrity from sidecar
+			sleeve.Integrity = 100.0
+
 			if status, ok := sidecarStatuses[sleeve.ContainerName]; ok {
 				if status.DHF != nil {
 					sleeve.DHF = status.DHF.Name
@@ -133,12 +146,9 @@ func (s *Server) handleSleeves(w http.ResponseWriter, r *http.Request) {
 				}
 				if status.Workspace != nil && status.Workspace.Cstack != nil {
 					sleeve.Integrity = calculateIntegrityFromCstack(status.Workspace.Cstack)
-				} else {
-					sleeve.Integrity = 100.0
 				}
 			}
 
-			// Container resource stats still come from Docker API
 			if stats, err := s.docker.GetContainerStats(ctx, sleeve.ContainerID); err == nil {
 				sleeve.Resources = stats
 			}
@@ -453,11 +463,7 @@ func (s *Server) handleWorkspaceBranches(w http.ResponseWriter, r *http.Request)
 	case http.MethodGet:
 		branches, err := s.workspaces.ListBranches(workspace)
 		if err != nil {
-			if strings.Contains(err.Error(), "not a git repository") {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-			} else {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
+			http.Error(w, err.Error(), gitErrorStatus(err))
 			return
 		}
 
@@ -483,22 +489,11 @@ func (s *Server) handleWorkspaceBranches(w http.ResponseWriter, r *http.Request)
 				return
 			}
 
-			err := s.workspaces.SwitchBranch(req.Workspace, req.Branch)
-			if err != nil {
-				errMsg := err.Error()
-				if strings.Contains(errMsg, "not found") {
-					http.Error(w, errMsg, http.StatusNotFound)
-				} else if strings.Contains(errMsg, "in use") || strings.Contains(errMsg, "uncommitted") {
-					http.Error(w, errMsg, http.StatusConflict)
-				} else if strings.Contains(errMsg, "not a git repository") {
-					http.Error(w, errMsg, http.StatusBadRequest)
-				} else {
-					http.Error(w, errMsg, http.StatusInternalServerError)
-				}
+			if err := s.workspaces.SwitchBranch(req.Workspace, req.Branch); err != nil {
+				http.Error(w, err.Error(), gitErrorStatus(err))
 				return
 			}
 
-			// Return updated workspace info
 			workspaces, err := s.workspaces.List()
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -519,14 +514,7 @@ func (s *Server) handleWorkspaceBranches(w http.ResponseWriter, r *http.Request)
 		case "fetch":
 			result, err := s.workspaces.FetchRemote(workspace)
 			if err != nil {
-				errMsg := err.Error()
-				if strings.Contains(errMsg, "not found") {
-					http.Error(w, errMsg, http.StatusNotFound)
-				} else if strings.Contains(errMsg, "not a git repository") {
-					http.Error(w, errMsg, http.StatusBadRequest)
-				} else {
-					http.Error(w, errMsg, http.StatusInternalServerError)
-				}
+				http.Error(w, err.Error(), gitErrorStatus(err))
 				return
 			}
 
@@ -536,16 +524,7 @@ func (s *Server) handleWorkspaceBranches(w http.ResponseWriter, r *http.Request)
 		case "pull":
 			result, err := s.workspaces.PullRemote(workspace)
 			if err != nil {
-				errMsg := err.Error()
-				if strings.Contains(errMsg, "not found") {
-					http.Error(w, errMsg, http.StatusNotFound)
-				} else if strings.Contains(errMsg, "in use") || strings.Contains(errMsg, "uncommitted") {
-					http.Error(w, errMsg, http.StatusConflict)
-				} else if strings.Contains(errMsg, "not a git repository") {
-					http.Error(w, errMsg, http.StatusBadRequest)
-				} else {
-					http.Error(w, errMsg, http.StatusInternalServerError)
-				}
+				http.Error(w, err.Error(), gitErrorStatus(err))
 				return
 			}
 
@@ -555,16 +534,7 @@ func (s *Server) handleWorkspaceBranches(w http.ResponseWriter, r *http.Request)
 		case "commit":
 			result, err := s.workspaces.CommitAll(workspace, "envoy ui commit")
 			if err != nil {
-				errMsg := err.Error()
-				if strings.Contains(errMsg, "not found") {
-					http.Error(w, errMsg, http.StatusNotFound)
-				} else if strings.Contains(errMsg, "in use") {
-					http.Error(w, errMsg, http.StatusConflict)
-				} else if strings.Contains(errMsg, "not a git repository") {
-					http.Error(w, errMsg, http.StatusBadRequest)
-				} else {
-					http.Error(w, errMsg, http.StatusInternalServerError)
-				}
+				http.Error(w, err.Error(), gitErrorStatus(err))
 				return
 			}
 
@@ -574,16 +544,7 @@ func (s *Server) handleWorkspaceBranches(w http.ResponseWriter, r *http.Request)
 		case "push":
 			result, err := s.workspaces.PushToRemote(workspace)
 			if err != nil {
-				errMsg := err.Error()
-				if strings.Contains(errMsg, "not found") {
-					http.Error(w, errMsg, http.StatusNotFound)
-				} else if strings.Contains(errMsg, "in use") {
-					http.Error(w, errMsg, http.StatusConflict)
-				} else if strings.Contains(errMsg, "not a git repository") {
-					http.Error(w, errMsg, http.StatusBadRequest)
-				} else {
-					http.Error(w, errMsg, http.StatusInternalServerError)
-				}
+				http.Error(w, err.Error(), gitErrorStatus(err))
 				return
 			}
 
