@@ -233,6 +233,129 @@ func (c *DockerClient) GetContainerCount() (running int, total int, err error) {
 
 ---
 
+## 2.5 Workspace Size Monitoring
+
+**Use Case:** Detect runaway processes creating massive files (e.g., a qemu.log that grew to 97GB from an unkilled background task).
+
+**Data needed:** Size of each workspace directory in bytes
+
+**Recommendation:** Envoy calculates directly (has access to `/workspaces`)
+
+```go
+// internal/envoy/workspace_manager.go
+func (m *WorkspaceManager) GetWorkspaceSize(path string) (uint64, error) {
+    var size uint64
+    err := filepath.WalkDir(path, func(_ string, d fs.DirEntry, err error) error {
+        if err != nil {
+            return nil // Skip permission errors
+        }
+        if !d.IsDir() {
+            info, err := d.Info()
+            if err == nil {
+                size += uint64(info.Size())
+            }
+        }
+        return nil
+    })
+    return size, err
+}
+```
+
+**Alternative:** Use `du -sb` command for speed on large directories:
+```go
+func (m *WorkspaceManager) GetWorkspaceSizeFast(path string) (uint64, error) {
+    cmd := exec.Command("du", "-sb", path)
+    output, err := cmd.Output()
+    // Parse: "123456789\t/path/to/workspace\n"
+    fields := strings.Fields(string(output))
+    return strconv.ParseUint(fields[0], 10, 64)
+}
+```
+
+### Warning Thresholds
+
+| Level | Threshold | UI Indicator |
+|-------|-----------|--------------|
+| Normal | < 5 GB | Green/cyan |
+| Caution | 5-10 GB | Amber |
+| Warning | 10-20 GB | Amber + icon |
+| Critical | > 20 GB | Magenta/red + pulsing |
+
+**Configuration** (envoy.yaml):
+```yaml
+workspaces:
+  size_warning_gb: 10
+  size_critical_gb: 20
+```
+
+### API Response
+
+Extend `WorkspaceInfo` in `/api/workspaces`:
+```go
+type WorkspaceInfo struct {
+    // ... existing fields ...
+    SizeBytes    uint64 `json:"size_bytes"`
+    SizeWarning  bool   `json:"size_warning"`   // > warning threshold
+    SizeCritical bool   `json:"size_critical"`  // > critical threshold
+}
+```
+
+### WebUI Display
+
+**Workspaces table:** Add "Size" column with color-coded values:
+```html
+<td class="ws-size warning">12.4 GB</td>
+<td class="ws-size critical">47.2 GB</td>
+```
+
+**Sleeve cards:** Show workspace size with warning indicator:
+```html
+<div class="sleeve-row">
+    <span class="sleeve-label">Workspace</span>
+    <span class="sleeve-value">
+        protectorate
+        <span class="size-badge warning">12.4 GB</span>
+    </span>
+</div>
+```
+
+### Background Monitoring
+
+Consider a background goroutine that:
+1. Checks workspace sizes every 5 minutes
+2. Logs warnings to envoy stdout when thresholds exceeded
+3. Could eventually trigger alerts or notifications
+
+```go
+func (m *WorkspaceManager) StartSizeMonitor(ctx context.Context) {
+    ticker := time.NewTicker(5 * time.Minute)
+    for {
+        select {
+        case <-ticker.C:
+            workspaces, _ := m.ListWorkspaces()
+            for _, ws := range workspaces {
+                if ws.SizeBytes > m.config.SizeCriticalBytes {
+                    log.Printf("CRITICAL: Workspace %s is %.2f GB", ws.Name, float64(ws.SizeBytes)/1e9)
+                }
+            }
+        case <-ctx.Done():
+            return
+        }
+    }
+}
+```
+
+### Performance Considerations
+
+- `du -sb` is faster than `filepath.WalkDir` for large directories
+- Cache size results for 1-2 minutes (don't recalculate on every API call)
+- Consider async calculation - return cached value immediately, update in background
+- Skip `.git/objects` or provide option to exclude patterns
+
+**Effort:** Low-Medium - straightforward implementation, caching adds complexity
+
+---
+
 ## 3. Needlecast Messaging
 
 **Current State:** Placeholder UI with disabled inputs
@@ -345,15 +468,16 @@ GET /api/config/env                - Get environment info (sanitized)
 |----------|---------|--------|--------|
 | 1 | Sleeve uptime | Low | High - easy win |
 | 2 | Docker container count | Low | Medium |
-| 3 | Host disk stats | Low | Medium |
-| 4 | Stack integrity (cstack-based) | Low | Medium |
-| 5 | Host memory stats | Medium | Medium |
-| 6 | Host CPU stats | Medium | Medium |
-| 7 | Container memory stats | Medium | High |
-| 8 | Container CPU stats | Medium | High |
-| 9 | Configuration viewer | Low | Low |
-| 10 | System logs | Medium | Medium |
-| 11 | Needlecast messaging | High | High |
+| 3 | **Workspace size monitoring** | Low | **High - prevents disk disasters** |
+| 4 | Host disk stats | Low | Medium |
+| 5 | Stack integrity (cstack-based) | Low | Medium |
+| 6 | Host memory stats | Medium | Medium |
+| 7 | Host CPU stats | Medium | Medium |
+| 8 | Container memory stats | Medium | High |
+| 9 | Container CPU stats | Medium | High |
+| 10 | Configuration viewer | Low | Low |
+| 11 | System logs | Medium | Medium |
+| 12 | Needlecast messaging | High | High |
 
 ---
 
@@ -374,7 +498,8 @@ GET  /api/config                  - Configuration viewer
 ### Extended Existing Endpoints
 
 ```
-GET /api/sleeves  - Add: spawn_time, cpu_percent, memory_used, memory_limit, integrity
+GET /api/sleeves     - Add: spawn_time, cpu_percent, memory_used, memory_limit, integrity
+GET /api/workspaces  - Add: size_bytes, size_warning, size_critical
 ```
 
 ---
@@ -426,9 +551,11 @@ Consider caching expensive operations:
 |------|---------|
 | `internal/envoy/docker.go` | Add `ContainerStats()` |
 | `internal/envoy/host_stats.go` | New file for host metrics |
+| `internal/envoy/workspace_manager.go` | Add `GetWorkspaceSize()`, size thresholds, background monitor |
 | `internal/envoy/handlers.go` | Add new API handlers |
 | `internal/envoy/server.go` | Register new routes |
-| `internal/protocol/types.go` | Add stats structs |
+| `internal/protocol/types.go` | Add stats structs, extend `WorkspaceInfo` with size fields |
+| `configs/envoy.yaml` | Add `size_warning_gb`, `size_critical_gb` settings |
 | `docker-compose.yaml` | Mount /proc for host stats |
 
 ### Frontend (JS/HTML)
