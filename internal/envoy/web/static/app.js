@@ -505,12 +505,16 @@ async function refreshSleeves() {
 
             const dhfName = s.dhf || 'Claude Code';
             const dhfVersion = s.dhf_version ? ` v${s.dhf_version}` : '';
-            const dhfDisplay = dhfName + dhfVersion;
+            const sidecarHealthy = s.sidecar_healthy !== false;
+            const dhfSuffix = sidecarHealthy ? '' : ' (cached)';
+            const dhfDisplay = dhfName + dhfVersion + dhfSuffix;
+            const sidecarClass = sidecarHealthy ? 'healthy' : 'unhealthy';
 
             return `
             <div class="sleeve-card ${healthClass}">
                 <div class="sleeve-header">
                     <span class="sleeve-name">SLEEVE: ${escapeHtml(s.name)}</span>
+                    <span class="sidecar-status ${sidecarClass}" title="Sidecar ${sidecarHealthy ? 'connected' : 'unreachable'}"></span>
                     <span class="sleeve-status active">ACTIVE</span>
                 </div>
                 <div class="sleeve-body">
