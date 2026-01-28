@@ -1097,7 +1097,8 @@ async function initCstack(e) {
 
 function updateWorkspaceSelect() {
     const select = document.getElementById('existing-workspace-select');
-    const available = workspacesCache.filter(ws => !ws.in_use);
+    const pendingPaths = new Set(pendingSpawns.map(p => p.workspace));
+    const available = workspacesCache.filter(ws => !ws.in_use && !pendingPaths.has(ws.path));
     if (available.length === 0) {
         select.innerHTML = '<option value="">No available workspaces</option>';
         return;

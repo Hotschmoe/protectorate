@@ -22,19 +22,21 @@ var namePool = []string{
 }
 
 type SleeveManager struct {
-	mu        sync.RWMutex
-	docker    *DockerClient
-	cfg       *config.EnvoyConfig
-	sleeves   map[string]*protocol.SleeveInfo
-	usedNames map[string]bool
+	mu                sync.RWMutex
+	docker            *DockerClient
+	cfg               *config.EnvoyConfig
+	sleeves           map[string]*protocol.SleeveInfo
+	usedNames         map[string]bool
+	pendingWorkspaces map[string]bool
 }
 
 func NewSleeveManager(docker *DockerClient, cfg *config.EnvoyConfig) *SleeveManager {
 	return &SleeveManager{
-		docker:    docker,
-		cfg:       cfg,
-		sleeves:   make(map[string]*protocol.SleeveInfo),
-		usedNames: make(map[string]bool),
+		docker:            docker,
+		cfg:               cfg,
+		sleeves:           make(map[string]*protocol.SleeveInfo),
+		usedNames:         make(map[string]bool),
+		pendingWorkspaces: make(map[string]bool),
 	}
 }
 
@@ -79,6 +81,26 @@ func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.Sleeve
 	if _, err := os.Stat(workspace); os.IsNotExist(err) {
 		return nil, fmt.Errorf("workspace %q does not exist", workspace)
 	}
+
+	m.mu.Lock()
+	if m.pendingWorkspaces[workspace] {
+		m.mu.Unlock()
+		return nil, fmt.Errorf("workspace %q already has a spawn in progress", workspace)
+	}
+	for _, s := range m.sleeves {
+		if s.Workspace == workspace {
+			m.mu.Unlock()
+			return nil, fmt.Errorf("workspace %q is already in use by sleeve %q", workspace, s.Name)
+		}
+	}
+	m.pendingWorkspaces[workspace] = true
+	m.mu.Unlock()
+
+	defer func() {
+		m.mu.Lock()
+		delete(m.pendingWorkspaces, workspace)
+		m.mu.Unlock()
+	}()
 
 	name := req.Name
 	if name == "" {
