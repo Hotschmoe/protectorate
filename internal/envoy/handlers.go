@@ -82,17 +82,13 @@ func (s *Server) handleHostLimits(w http.ResponseWriter, r *http.Request) {
 	}
 
 	memOptions := make([]int64, 0)
-	for _, mb := range []int64{1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072} {
-		if mb <= totalMemoryMB {
-			memOptions = append(memOptions, mb)
-		}
+	for mb := int64(1024); mb < totalMemoryMB; mb *= 2 {
+		memOptions = append(memOptions, mb)
 	}
 
 	cpuOptions := make([]int, 0)
-	for _, cpu := range []int{1, 2, 4, 8, 16, 32, 64} {
-		if cpu <= totalCPU {
-			cpuOptions = append(cpuOptions, cpu)
-		}
+	for cpu := 1; cpu < totalCPU; cpu *= 2 {
+		cpuOptions = append(cpuOptions, cpu)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
