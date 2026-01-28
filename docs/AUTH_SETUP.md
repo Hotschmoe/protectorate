@@ -17,7 +17,7 @@ This document describes how Protectorate handles authentication for AI CLI tools
 
 | Provider | Auth Method | Refresh Support | Token Lifetime |
 |----------|-------------|-----------------|----------------|
-| Claude (Anthropic) | OAuth setup-token | No | ~24-48 hours |
+| Claude (Anthropic) | OAuth setup-token | No | **1 year** |
 | Gemini (Google) | API key or OAuth | Yes (OAuth) | API key: unlimited |
 | Codex (OpenAI) | OAuth PKCE | Yes | Hours (auto-refresh) |
 | Git | SSH keys | N/A | Unlimited |
@@ -87,7 +87,7 @@ docker exec envoy envoy auth status
 # Should show: claude: authenticated (token)
 ```
 
-**Token expiration**: Claude tokens expire after 24-48 hours. When expired:
+**Token expiration**: Claude setup-tokens are valid for **1 year**. When expired:
 1. `envoy auth status` shows expired
 2. Re-run `claude setup-token` on host
 3. Re-run `envoy auth login claude --token "<new-token>"`
