@@ -387,23 +387,34 @@ func (d *DockerClient) GetDHFInfo(ctx context.Context, containerID string) (*DHF
 
 // detectDHF tries known CLI tools and returns the first one found with its version
 func (d *DockerClient) detectDHF(ctx context.Context, containerID string) (*DHFInfo, error) {
+	// Use full paths since PATH may not be set during exec
 	tools := []struct {
 		cmd  string
 		name string
 	}{
-		{"claude", "Claude Code"},
-		{"gemini", "Gemini CLI"},
-		{"codex", "Codex CLI"},
+		{"/home/claude/.local/bin/claude", "Claude Code"},
+		{"/usr/local/bin/gemini", "Gemini CLI"},
+		{"/usr/local/bin/codex", "Codex CLI"},
 	}
 
 	for _, tool := range tools {
-		version, err := d.execCommand(ctx, containerID, tool.cmd, "--version")
-		if err == nil && version != "" {
+		output, err := d.execCommand(ctx, containerID, tool.cmd, "--version")
+		if err == nil && output != "" {
+			version := parseVersion(output)
 			return &DHFInfo{Name: tool.name, Version: version}, nil
 		}
 	}
 
 	return &DHFInfo{Name: "Unknown", Version: ""}, nil
+}
+
+// parseVersion extracts version number from output like "2.1.20 (Claude Code)"
+func parseVersion(output string) string {
+	// Take first word (the version number)
+	if idx := strings.Index(output, " "); idx > 0 {
+		return output[:idx]
+	}
+	return output
 }
 
 // execCommand runs a command in a container and returns the first line of stdout
