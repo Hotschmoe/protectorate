@@ -579,7 +579,7 @@ func (s *Server) handleDoctor(w http.ResponseWriter, r *http.Request) {
 	checks = append(checks, checkGeminiCredentials())
 	checks = append(checks, checkCodexCredentials())
 	checks = append(checks, s.checkDocker())
-	checks = append(checks, checkGitIdentity())
+	checks = append(checks, s.checkGitIdentity())
 	checks = append(checks, s.checkRavenNetwork())
 
 	w.Header().Set("Content-Type", "application/json")
@@ -638,25 +638,38 @@ func checkSSHAgent() protocol.DoctorCheck {
 }
 
 func checkClaudeCredentials() protocol.DoctorCheck {
+	// Check for OAuth credentials (synced from host)
+	oauthPath := "/home/agent/.creds/claude/.credentials.json"
+	if _, err := os.Stat(oauthPath); err == nil {
+		return protocol.DoctorCheck{
+			Name:    "Claude Credentials",
+			Status:  "pass",
+			Message: "Authenticated via OAuth (synced from host)",
+		}
+	}
+
+	// Check for API key credentials
 	credPath := "/home/agent/.creds/claude/credentials.json"
 	if _, err := os.Stat(credPath); err == nil {
 		return protocol.DoctorCheck{
 			Name:    "Claude Credentials",
 			Status:  "pass",
-			Message: "Credentials file found",
+			Message: "Authenticated via API key",
 		}
 	}
+
 	return protocol.DoctorCheck{
 		Name:       "Claude Credentials",
 		Status:     "fail",
-		Message:    "Credentials file not found",
-		Suggestion: "Run 'claude auth login' in a sleeve to authenticate",
+		Message:    "Credentials not found",
+		Suggestion: "Add API key in Config tab, or run 'envoy auth sync' after 'claude auth login' on host",
 	}
 }
 
 func checkGeminiCredentials() protocol.DoctorCheck {
-	// Check for API key first
-	if os.Getenv("GEMINI_API_KEY") != "" {
+	// Check for credentials in the agent-creds volume
+	credPath := "/home/agent/.creds/gemini/credentials.json"
+	if _, err := os.Stat(credPath); err == nil {
 		return protocol.DoctorCheck{
 			Name:    "Gemini Credentials",
 			Status:  "pass",
@@ -664,14 +677,10 @@ func checkGeminiCredentials() protocol.DoctorCheck {
 		}
 	}
 
-	// Check for OAuth tokens
-	homeDir := os.Getenv("HOME")
-	if homeDir == "" {
-		homeDir = "/home/agent"
-	}
+	// Check for OAuth tokens in standard locations
 	oauthPaths := []string{
-		homeDir + "/.config/gemini-cli/oauth_tokens.json",
-		homeDir + "/.gemini/oauth_tokens.json",
+		"/home/agent/.config/gemini-cli/oauth_tokens.json",
+		"/home/agent/.gemini/oauth_tokens.json",
 	}
 
 	for _, path := range oauthPaths {
@@ -688,13 +697,14 @@ func checkGeminiCredentials() protocol.DoctorCheck {
 		Name:       "Gemini Credentials",
 		Status:     "warning",
 		Message:    "Not authenticated (optional)",
-		Suggestion: "Set GEMINI_API_KEY or run 'gemini' to authenticate",
+		Suggestion: "Add API key in Config tab or run 'gemini' to authenticate via OAuth",
 	}
 }
 
 func checkCodexCredentials() protocol.DoctorCheck {
-	// Check for API key first
-	if os.Getenv("OPENAI_API_KEY") != "" {
+	// Check for credentials in the agent-creds volume
+	credPath := "/home/agent/.creds/codex/auth.json"
+	if _, err := os.Stat(credPath); err == nil {
 		return protocol.DoctorCheck{
 			Name:    "Codex Credentials",
 			Status:  "pass",
@@ -702,14 +712,10 @@ func checkCodexCredentials() protocol.DoctorCheck {
 		}
 	}
 
-	// Check for cached auth
-	homeDir := os.Getenv("HOME")
-	if homeDir == "" {
-		homeDir = "/home/agent"
-	}
+	// Check for cached auth in standard locations
 	authPaths := []string{
-		homeDir + "/.codex/auth.json",
-		homeDir + "/.config/codex/auth.json",
+		"/home/agent/.codex/auth.json",
+		"/home/agent/.config/codex/auth.json",
 	}
 
 	for _, path := range authPaths {
@@ -726,7 +732,7 @@ func checkCodexCredentials() protocol.DoctorCheck {
 		Name:       "Codex Credentials",
 		Status:     "warning",
 		Message:    "Not authenticated (optional)",
-		Suggestion: "Set OPENAI_API_KEY or run 'codex' to authenticate",
+		Suggestion: "Add API key in Config tab or run 'codex' to authenticate",
 	}
 }
 
@@ -749,32 +755,23 @@ func (s *Server) checkDocker() protocol.DoctorCheck {
 	}
 }
 
-func checkGitIdentity() protocol.DoctorCheck {
-	name := os.Getenv("GIT_COMMITTER_NAME")
-	email := os.Getenv("GIT_COMMITTER_EMAIL")
+func (s *Server) checkGitIdentity() protocol.DoctorCheck {
+	name := s.cfg.Git.Committer.Name
+	email := s.cfg.Git.Committer.Email
 
 	if name == "" || email == "" {
 		missing := []string{}
 		if name == "" {
-			missing = append(missing, "GIT_COMMITTER_NAME")
+			missing = append(missing, "name")
 		}
 		if email == "" {
-			missing = append(missing, "GIT_COMMITTER_EMAIL")
+			missing = append(missing, "email")
 		}
-		return protocol.DoctorCheck{
-			Name:       "Git Identity",
-			Status:     "fail",
-			Message:    fmt.Sprintf("%s not set", strings.Join(missing, " and ")),
-			Suggestion: "Set GIT_COMMITTER_NAME and GIT_COMMITTER_EMAIL in .env",
-		}
-	}
-
-	if name == "Protectorate" || email == "protectorate@local" {
 		return protocol.DoctorCheck{
 			Name:       "Git Identity",
 			Status:     "warning",
-			Message:    fmt.Sprintf("Using default identity: %s <%s>", name, email),
-			Suggestion: "Set GIT_COMMITTER_NAME and GIT_COMMITTER_EMAIL to your real identity in .env",
+			Message:    fmt.Sprintf("Git committer %s not configured", strings.Join(missing, " and ")),
+			Suggestion: "Set git identity in Config tab or run: envoy config set git.committer.name/email",
 		}
 	}
 
