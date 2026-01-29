@@ -21,12 +21,6 @@
         </div>
     </nav>
 
-    <div id="auth-warning-banner" class="auth-warning-banner hidden">
-        <span id="auth-warning-text"></span>
-        <a href="#" onclick="switchTab('doctor'); return false;">View Details</a>
-        <button class="banner-dismiss" onclick="dismissAuthBanner()">[x]</button>
-    </div>
-
     <nav class="tab-nav">
         <div class="tab active" onclick="switchTab('sleeves')">Sleeves</div>
         <div class="tab" onclick="switchTab('needlecast')">Needlecast</div>
@@ -403,6 +397,8 @@
             <div id="terminal-container" class="terminal-container"></div>
         </div>
     </div>
+
+    <div id="notify-container" class="notify-container"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>

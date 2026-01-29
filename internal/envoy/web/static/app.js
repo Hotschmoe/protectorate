@@ -4,6 +4,117 @@ let clonePollingInterval = null;
 let lastFetchAllTime = 0;
 const FETCH_ALL_THROTTLE_MS = 60000;
 
+// Notification system
+const notify = (function() {
+    let counter = 0;
+    const dismissed = new Set();
+
+    const ICONS = {
+        error: '[x]',
+        warning: '[!]',
+        success: '[*]',
+        info: '[i]'
+    };
+
+    const AUTO_DISMISS = {
+        error: 0,
+        warning: 10000,
+        info: 5000,
+        success: 3000
+    };
+
+    function show(type, title, options = {}) {
+        const id = ++counter;
+        const container = document.getElementById('notify-container');
+        if (!container) return id;
+
+        const box = document.createElement('div');
+        box.className = `notify-box ${type}`;
+        box.dataset.notifyId = id;
+
+        let html = `
+            <div class="notify-header">
+                <span class="notify-icon">${ICONS[type]}</span>
+                <div class="notify-content">
+                    <div class="notify-title">${escapeHtml(title)}</div>
+                    ${options.detail ? `<div class="notify-detail">${escapeHtml(options.detail)}</div>` : ''}
+                </div>
+                <button class="notify-dismiss" onclick="notify.dismiss(${id})">[x]</button>
+            </div>
+        `;
+
+        if (options.action) {
+            html += `
+                <div class="notify-action">
+                    <button class="notify-action-btn" data-notify-action="${id}">${escapeHtml(options.action.text)}</button>
+                </div>
+            `;
+        }
+
+        box.innerHTML = html;
+
+        if (options.action && options.action.onclick) {
+            const actionBtn = box.querySelector('[data-notify-action]');
+            if (actionBtn) {
+                actionBtn.addEventListener('click', () => {
+                    options.action.onclick();
+                    dismiss(id);
+                });
+            }
+        }
+
+        container.appendChild(box);
+
+        const autoDismissTime = options.autoDismiss !== undefined ? options.autoDismiss : AUTO_DISMISS[type];
+        if (autoDismissTime > 0) {
+            setTimeout(() => dismiss(id), autoDismissTime);
+        }
+
+        if (options.key) {
+            dismissed.delete(options.key);
+        }
+
+        return id;
+    }
+
+    function dismiss(id) {
+        const container = document.getElementById('notify-container');
+        if (!container) return;
+
+        const box = container.querySelector(`[data-notify-id="${id}"]`);
+        if (box) {
+            box.classList.add('removing');
+            setTimeout(() => box.remove(), 200);
+        }
+    }
+
+    function clear() {
+        const container = document.getElementById('notify-container');
+        if (container) {
+            container.innerHTML = '';
+        }
+    }
+
+    function isDismissed(key) {
+        return dismissed.has(key);
+    }
+
+    function markDismissed(key) {
+        dismissed.add(key);
+    }
+
+    return {
+        error: (title, options) => show('error', title, options),
+        warn: (title, options) => show('warning', title, options),
+        info: (title, options) => show('info', title, options),
+        success: (title, options) => show('success', title, options),
+        dismiss,
+        clear,
+        isDismissed,
+        markDismissed
+    };
+})();
+
 function formatDuration(ms) {
     if (ms < 0) ms = 0;
     const totalSeconds = Math.floor(ms / 1000);
@@ -856,10 +967,10 @@ async function switchBranch(e) {
 
         if (!resp.ok) {
             const err = await resp.text();
-            alert('Switch failed: ' + err);
+            notify.error('Branch switch failed', { detail: err });
         }
     } catch (err) {
-        alert('Switch failed: ' + err.message);
+        notify.error('Branch switch failed', { detail: err.message });
     } finally {
         switchingBranchPaths.delete(wsPath);
         await refreshWorkspacesTable();
@@ -880,7 +991,7 @@ async function fetchRemote(wsPath, btn) {
 
         if (!resp.ok) {
             const err = await resp.text();
-            alert('Fetch failed: ' + err);
+            notify.error('Fetch failed', { detail: err });
             btn.textContent = originalText;
             btn.disabled = false;
             return;
@@ -893,7 +1004,7 @@ async function fetchRemote(wsPath, btn) {
             refreshWorkspacesTable();
         }, 1000);
     } catch (e) {
-        alert('Fetch failed: ' + e.message);
+        notify.error('Fetch failed', { detail: e.message });
         btn.textContent = originalText;
         btn.disabled = false;
     }
@@ -913,7 +1024,7 @@ async function pullRemote(wsPath, btn) {
 
         if (!resp.ok) {
             const err = await resp.text();
-            alert('Pull failed: ' + err);
+            notify.error('Pull failed', { detail: err });
             btn.textContent = originalText;
             btn.disabled = false;
             return;
@@ -921,7 +1032,7 @@ async function pullRemote(wsPath, btn) {
 
         const result = await resp.json();
         if (!result.success) {
-            alert('Pull failed: ' + (result.message || 'unknown error'));
+            notify.error('Pull failed', { detail: result.message || 'unknown error' });
             btn.textContent = originalText;
             btn.disabled = false;
             return;
@@ -934,7 +1045,7 @@ async function pullRemote(wsPath, btn) {
             refreshWorkspacesTable();
         }, 1000);
     } catch (e) {
-        alert('Pull failed: ' + e.message);
+        notify.error('Pull failed', { detail: e.message });
         btn.textContent = originalText;
         btn.disabled = false;
     }
@@ -953,7 +1064,7 @@ async function commitChanges(wsPath, btn) {
 
         if (!resp.ok) {
             const err = await resp.text();
-            alert('Commit failed: ' + err);
+            notify.error('Commit failed', { detail: err });
             btn.textContent = originalText;
             btn.disabled = false;
             return;
@@ -961,7 +1072,7 @@ async function commitChanges(wsPath, btn) {
 
         const result = await resp.json();
         if (!result.success) {
-            alert('Commit failed: ' + (result.message || 'unknown error'));
+            notify.error('Commit failed', { detail: result.message || 'unknown error' });
             btn.textContent = originalText;
             btn.disabled = false;
             return;
@@ -974,7 +1085,7 @@ async function commitChanges(wsPath, btn) {
             refreshWorkspacesTable();
         }, 1000);
     } catch (e) {
-        alert('Commit failed: ' + e.message);
+        notify.error('Commit failed', { detail: e.message });
         btn.textContent = originalText;
         btn.disabled = false;
     }
@@ -993,7 +1104,7 @@ async function pushChanges(wsPath, btn) {
 
         if (!resp.ok) {
             const err = await resp.text();
-            alert('Push failed: ' + err);
+            notify.error('Push failed', { detail: err });
             btn.textContent = originalText;
             btn.disabled = false;
             return;
@@ -1001,7 +1112,7 @@ async function pushChanges(wsPath, btn) {
 
         const result = await resp.json();
         if (!result.success) {
-            alert('Push failed: ' + (result.message || 'unknown error'));
+            notify.error('Push failed', { detail: result.message || 'unknown error' });
             btn.textContent = originalText;
             btn.disabled = false;
             return;
@@ -1014,14 +1125,14 @@ async function pushChanges(wsPath, btn) {
             refreshWorkspacesTable();
         }, 1000);
     } catch (e) {
-        alert('Push failed: ' + e.message);
+        notify.error('Push failed', { detail: e.message });
         btn.textContent = originalText;
         btn.disabled = false;
     }
 }
 
 function viewWorkspace(wsPath) {
-    alert('View workspace coming soon. Options: LazyGit, VS Code (code-server), or web file browser.');
+    notify.info('View workspace coming soon', { detail: 'Options: LazyGit, VS Code (code-server), or web file browser' });
 }
 
 function showCstackInitModal(wsPath, wsName) {
@@ -1058,10 +1169,10 @@ async function initCstack(e) {
 
         const result = await resp.json();
         if (!result.success && result.error && !result.error.includes('already')) {
-            alert('Cstack init failed: ' + result.error);
+            notify.error('Cstack init failed', { detail: result.error });
         }
     } catch (err) {
-        alert('Cstack init failed: ' + err.message);
+        notify.error('Cstack init failed', { detail: err.message });
     } finally {
         initializingCstackPaths.delete(wsPath);
         await refreshWorkspacesTable();
@@ -1204,7 +1315,7 @@ async function cloneWorkspace(e) {
     const name = document.getElementById('clone-name-input').value;
 
     if (!repoUrl) {
-        alert('Please enter a repository URL');
+        notify.warn('Please enter a repository URL');
         return;
     }
 
@@ -1274,7 +1385,7 @@ async function spawnSleeve(e) {
         if (mode === 'new') {
             const wsName = document.getElementById('new-workspace-input').value;
             if (!wsName) {
-                alert('Please enter a workspace name');
+                notify.warn('Please enter a workspace name');
                 return;
             }
             showSpawnLoading('Creating workspace...');
@@ -1286,7 +1397,7 @@ async function spawnSleeve(e) {
             if (!createResp.ok) {
                 hideSpawnLoading();
                 const err = await createResp.text();
-                alert('Failed to create workspace: ' + err);
+                notify.error('Failed to create workspace', { detail: err });
                 return;
             }
             const wsData = await createResp.json();
@@ -1294,7 +1405,7 @@ async function spawnSleeve(e) {
         } else if (mode === 'existing') {
             workspace = document.getElementById('existing-workspace-select').value;
             if (!workspace) {
-                alert('Please select a workspace');
+                notify.warn('Please select a workspace');
                 return;
             }
         }
@@ -1331,7 +1442,7 @@ async function spawnSleeve(e) {
         if (!resp.ok) {
             const err = await resp.text();
             refreshSleeves();
-            alert('Failed to spawn sleeve: ' + err);
+            notify.error('Failed to spawn sleeve', { detail: err });
             return;
         }
 
@@ -1342,7 +1453,7 @@ async function spawnSleeve(e) {
         }
         hideSpawnLoading();
         console.error('Failed to spawn sleeve:', err);
-        alert('Failed to spawn sleeve: ' + err.message);
+        notify.error('Failed to spawn sleeve', { detail: err.message });
         refreshSleeves();
     }
 }
@@ -1356,12 +1467,13 @@ async function killSleeve(name) {
         const resp = await fetch(`/api/sleeves/${name}`, { method: 'DELETE' });
         if (!resp.ok) {
             const err = await resp.text();
-            alert('Failed to kill sleeve: ' + err);
+            notify.error('Failed to kill sleeve', { detail: err });
             return;
         }
         refreshSleeves();
     } catch (e) {
         console.error('Failed to kill sleeve:', e);
+        notify.error('Failed to kill sleeve', { detail: e.message });
     }
 }
 
@@ -1408,34 +1520,43 @@ function hideTerminalModal() {
 }
 
 // Auth status check
-let authBannerDismissed = false;
-
 async function checkAuthStatus() {
-    if (authBannerDismissed) return;
+    if (notify.isDismissed('auth-warning')) return;
 
     try {
         const resp = await fetch('/api/auth/check');
         const result = await resp.json();
-        const banner = document.getElementById('auth-warning-banner');
-        const textEl = document.getElementById('auth-warning-text');
 
         if (result.expired) {
-            textEl.textContent = 'Authentication expired - credentials need renewal';
-            banner.classList.remove('hidden');
+            notify.warn('Authentication expired', {
+                detail: 'Credentials need renewal',
+                action: {
+                    text: 'View Details',
+                    onclick: () => {
+                        switchTab('doctor');
+                        notify.markDismissed('auth-warning');
+                    }
+                },
+                autoDismiss: 0,
+                key: 'auth-warning'
+            });
         } else if (result.expiring_soon) {
-            textEl.textContent = 'Authentication expiring soon - check Doctor tab for details';
-            banner.classList.remove('hidden');
-        } else {
-            banner.classList.add('hidden');
+            notify.warn('Authentication expiring soon', {
+                detail: 'Check Doctor tab for details',
+                action: {
+                    text: 'View Details',
+                    onclick: () => {
+                        switchTab('doctor');
+                        notify.markDismissed('auth-warning');
+                    }
+                },
+                autoDismiss: 0,
+                key: 'auth-warning'
+            });
         }
     } catch (e) {
         console.error('Failed to check auth status:', e);
     }
-}
-
-function dismissAuthBanner() {
-    authBannerDismissed = true;
-    document.getElementById('auth-warning-banner').classList.add('hidden');
 }
 
 // Initialize on page load
