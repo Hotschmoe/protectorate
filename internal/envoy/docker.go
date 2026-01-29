@@ -296,6 +296,12 @@ var containerStatsCache = &statsCache{
 
 
 // GetContainerStats returns resource stats for a container (cached for 5s)
+// Ping checks if the Docker daemon is reachable
+func (d *DockerClient) Ping(ctx context.Context) error {
+	_, err := d.cli.Ping(ctx)
+	return err
+}
+
 func (d *DockerClient) GetContainerStats(ctx context.Context, containerID string) (*protocol.ContainerResourceStats, error) {
 	containerStatsCache.mu.RLock()
 	if cached, ok := containerStatsCache.data[containerID]; ok {

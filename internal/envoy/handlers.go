@@ -740,7 +740,7 @@ func (s *Server) checkDocker() protocol.DoctorCheck {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if _, err := s.docker.cli.Ping(ctx); err != nil {
+	if err := s.docker.Ping(ctx); err != nil {
 		return protocol.DoctorCheck{
 			Name:       "Docker",
 			Status:     "fail",

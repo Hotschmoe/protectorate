@@ -9,12 +9,24 @@ import (
 	"sync"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/hotschmoe/protectorate/internal/config"
 	"github.com/hotschmoe/protectorate/internal/protocol"
 )
+
+// SleeveDockerClient defines Docker operations needed by SleeveManager
+type SleeveDockerClient interface {
+	EnsureNetwork(name string) error
+	CreateContainer(name, image string, config *container.Config, hostConfig *container.HostConfig, networkConfig *network.NetworkingConfig) (string, error)
+	StartContainer(id string) error
+	StopContainer(id string) error
+	RemoveContainer(id string) error
+	GetContainerByName(name string) (*types.Container, error)
+	ListSleeveContainers() ([]types.Container, error)
+}
 
 var namePool = []string{
 	"quell", "virginia", "rei", "mickey", "trepp",
@@ -23,14 +35,14 @@ var namePool = []string{
 
 type SleeveManager struct {
 	mu                sync.RWMutex
-	docker            *DockerClient
+	docker            SleeveDockerClient
 	cfg               *config.EnvoyConfig
 	sleeves           map[string]*protocol.SleeveInfo
 	usedNames         map[string]bool
 	pendingWorkspaces map[string]bool
 }
 
-func NewSleeveManager(docker *DockerClient, cfg *config.EnvoyConfig) *SleeveManager {
+func NewSleeveManager(docker SleeveDockerClient, cfg *config.EnvoyConfig) *SleeveManager {
 	return &SleeveManager{
 		docker:            docker,
 		cfg:               cfg,

@@ -6,19 +6,81 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	"github.com/hotschmoe/protectorate/internal/config"
+	"github.com/hotschmoe/protectorate/internal/protocol"
 )
+
+// ServerDockerClient defines Docker operations needed by Server
+type ServerDockerClient interface {
+	ListContainers() ([]ContainerInfo, error)
+	ListNetworks() ([]NetworkInfo, error)
+	GetContainerStats(ctx context.Context, containerID string) (*protocol.ContainerResourceStats, error)
+	GetContainerByName(name string) (*types.Container, error)
+	Ping(ctx context.Context) error
+	ExecAttach(ctx context.Context, opts ExecAttachOptions) (*ExecSession, error)
+	ExecResize(ctx context.Context, execID string, cols, rows uint) error
+}
+
+// ServerSidecarClient defines sidecar operations needed by Server
+type ServerSidecarClient interface {
+	BatchGetStatus(containerNames []string) map[string]*SidecarStatus
+}
+
+// ServerSleeveManager defines sleeve operations needed by Server
+type ServerSleeveManager interface {
+	List() []*protocol.SleeveInfo
+	Get(name string) (*protocol.SleeveInfo, error)
+	Spawn(req protocol.SpawnSleeveRequest) (*protocol.SleeveInfo, error)
+	Kill(name string) error
+	RecoverSleeves() error
+}
+
+// ServerWorkspaceManager defines workspace operations needed by Server
+type ServerWorkspaceManager interface {
+	List() ([]protocol.WorkspaceInfo, error)
+	Create(name string) (*protocol.WorkspaceInfo, error)
+	Clone(req protocol.CloneWorkspaceRequest) (*protocol.CloneJob, error)
+	GetJob(id string) (*protocol.CloneJob, error)
+	InitCstack(wsPath, mode string) (*protocol.CstackInitResult, error)
+	ListBranches(wsPath string) (*protocol.BranchListResponse, error)
+	SwitchBranch(wsPath, branch string) error
+	FetchRemote(wsPath string) (*protocol.FetchResult, error)
+	PullRemote(wsPath string) (*protocol.FetchResult, error)
+	CommitAll(wsPath, message string) (*protocol.FetchResult, error)
+	PushToRemote(wsPath string) (*protocol.FetchResult, error)
+	FetchAllRemotes() *protocol.FetchResult
+	SetOnCloneProgress(fn func(jobID, status string, progress int, errMsg string))
+}
+
+// ServerHostStatsCollector defines host stats operations needed by Server
+type ServerHostStatsCollector interface {
+	GetStats(ctx context.Context) *protocol.HostStats
+	GetMemoryStats() *protocol.MemoryStats
+	GetCPUStats() *protocol.CPUStats
+}
+
+// ServerAuthManager defines auth operations needed by Server
+type ServerAuthManager interface {
+	GetStatus() *protocol.AuthStatus
+	Check() *protocol.AuthCheckResult
+	SyncFromCLI(provider string) (map[string]interface{}, error)
+	Login(provider protocol.AuthProvider, token string) (*protocol.AuthLoginResult, error)
+	Revoke(provider protocol.AuthProvider) (*protocol.AuthRevokeResult, error)
+	LoadState() error
+	StartupCheck()
+}
 
 type Server struct {
 	cfg         *config.EnvoyConfig
 	http        *http.Server
-	docker      *DockerClient
-	sidecar     *SidecarClient
-	sleeves     *SleeveManager
-	workspaces  *WorkspaceManager
+	docker      ServerDockerClient
+	sidecar     ServerSidecarClient
+	sleeves     ServerSleeveManager
+	workspaces  ServerWorkspaceManager
 	agentDoctor *AgentDoctorManager
-	hostStats   *HostStatsCollector
-	auth        *AuthManager
+	hostStats   ServerHostStatsCollector
+	auth        ServerAuthManager
 	sseHub      *SSEHub
 	broadcaster *SSEBroadcaster
 	shutdownCh  chan struct{} // Channel to signal shutdown for restart

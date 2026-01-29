@@ -1,4 +1,4 @@
-.PHONY: build build-base build-sleeve build-envoy build-envoy-release up down clean clean-all help
+.PHONY: build build-base build-sleeve build-envoy build-envoy-release up down clean clean-all help test test-unit test-race test-cover lint ci
 
 # Default target (dev build)
 build: build-envoy build-sleeve
@@ -71,6 +71,32 @@ clean-all: clean
 	@docker rmi protectorate/base:latest 2>/dev/null || true
 	@docker rmi protectorate/envoy:latest 2>/dev/null || true
 	@echo "Clean-all complete."
+
+# =============================================================================
+# Testing Targets
+# =============================================================================
+
+test: test-race
+
+test-unit:
+	go test ./...
+
+test-race:
+	go test -race ./...
+
+test-cover:
+	go test -race -coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out
+	@rm -f coverage.out
+
+lint:
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run ./...; \
+	else \
+		echo "golangci-lint not installed, skipping lint"; \
+	fi
+
+ci: lint test-race
 
 # Show build times
 time-base:
@@ -169,6 +195,14 @@ help:
 	@echo "  make dev-logs            View dev container logs"
 	@echo "  make dev-down            Stop dev environment"
 	@echo "  make watch               Auto-rebuild on file changes (requires inotify-tools)"
+	@echo ""
+	@echo "Testing:"
+	@echo "  make test                Run tests with race detection"
+	@echo "  make test-unit           Run unit tests (fast, no race)"
+	@echo "  make test-race           Run tests with race detector"
+	@echo "  make test-cover          Run tests with coverage report"
+	@echo "  make lint                Run golangci-lint (if installed)"
+	@echo "  make ci                  Run lint + tests (for CI)"
 	@echo ""
 	@echo "Container Builds:"
 	@echo "  make build-base          Build shared base image (slow, ~2 min, run once)"
