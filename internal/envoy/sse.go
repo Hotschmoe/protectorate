@@ -19,7 +19,6 @@ type SSEHub struct {
 // SSEClient represents a connected SSE client
 type SSEClient struct {
 	send chan *SSEMessage
-	done chan struct{}
 }
 
 // SSEMessage represents a server-sent event
@@ -114,7 +113,6 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	// Create client
 	client := &SSEClient{
 		send: make(chan *SSEMessage, 64),
-		done: make(chan struct{}),
 	}
 
 	// Register client

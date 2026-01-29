@@ -110,23 +110,6 @@ const notify = (function() {
     };
 })();
 
-function formatDuration(ms) {
-    if (ms < 0) ms = 0;
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
-
-function formatBytes(bytes, decimals = 1) {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i];
-}
-
 const MSG_DATA = 0x30;
 const MSG_RESIZE = 0x31;
 
@@ -434,105 +417,13 @@ class TerminalConnection {
 }
 
 let sleevesCache = [];
-let hostStatsCache = null;
 let pendingSpawns = [];
 let sseConnected = false;
-
-async function refreshHostStats() {
-    try {
-        const resp = await fetch('/api/host/stats');
-        const stats = await resp.json();
-        hostStatsCache = stats;
-
-        if (stats.cpu) {
-            const cpuEl = document.getElementById('host-cpu-value');
-            const cpuBarEl = document.getElementById('host-cpu-bar');
-            const cpuDetailEl = document.getElementById('host-cpu-detail');
-            if (cpuEl) cpuEl.textContent = Math.round(stats.cpu.usage_percent) + '%';
-            if (cpuBarEl) cpuBarEl.style.width = stats.cpu.usage_percent + '%';
-            if (cpuDetailEl) cpuDetailEl.textContent = `${stats.cpu.cores} cores / ${stats.cpu.threads} threads`;
-        }
-
-        if (stats.memory) {
-            const memEl = document.getElementById('host-memory-value');
-            const memBarEl = document.getElementById('host-memory-bar');
-            const memDetailEl = document.getElementById('host-memory-detail');
-            const usedGB = (stats.memory.used_bytes / (1024 * 1024 * 1024)).toFixed(1);
-            const totalGB = (stats.memory.total_bytes / (1024 * 1024 * 1024)).toFixed(1);
-            if (memEl) memEl.textContent = usedGB + ' GB';
-            if (memBarEl) memBarEl.style.width = stats.memory.percent + '%';
-            if (memDetailEl) memDetailEl.textContent = `${usedGB} / ${totalGB} GB used`;
-        }
-
-        if (stats.disk) {
-            const diskEl = document.getElementById('host-disk-value');
-            const diskBarEl = document.getElementById('host-disk-bar');
-            const diskDetailEl = document.getElementById('host-disk-detail');
-            const usedGB = Math.round(stats.disk.used_bytes / (1024 * 1024 * 1024));
-            const totalGB = Math.round(stats.disk.total_bytes / (1024 * 1024 * 1024));
-            if (diskEl) diskEl.textContent = usedGB + ' GB';
-            if (diskBarEl) diskBarEl.style.width = stats.disk.percent + '%';
-            if (diskDetailEl) diskDetailEl.textContent = `${usedGB} / ${totalGB} GB used`;
-        }
-
-        if (stats.docker) {
-            const dockerEl = document.getElementById('host-docker-value');
-            const dockerBarEl = document.getElementById('host-docker-bar');
-            const dockerDetailEl = document.getElementById('host-docker-detail');
-            if (dockerEl) dockerEl.textContent = stats.docker.running_containers;
-            if (dockerBarEl) dockerBarEl.style.width = (stats.docker.running_containers / stats.docker.max_containers * 100) + '%';
-            if (dockerDetailEl) dockerDetailEl.textContent = `${stats.docker.running_containers} containers / ${stats.docker.max_containers} limit`;
-        }
-    } catch (e) {
-        console.error('Failed to fetch host stats:', e);
-    }
-}
 
 function getWorkspaceName(workspacePath) {
     if (!workspacePath) return 'unknown';
     const parts = workspacePath.split('/');
     return parts[parts.length - 1] || workspacePath;
-}
-
-function formatSleeveResources(sleeve) {
-    const resources = sleeve.resources;
-    const constrained = sleeve.constrained;
-
-    if (!resources) {
-        return { memDisplay: '-', memPct: 0, cpuDisplay: '-', cpuPct: 0 };
-    }
-
-    const memUsedBytes = resources.memory_used_bytes || 0;
-    const memUsedGB = (memUsedBytes / (1024 * 1024 * 1024)).toFixed(1);
-    const cpuPct = Math.round(resources.cpu_percent || 0);
-
-    let memDisplay, memPct, cpuDisplay;
-
-    if (constrained && sleeve.memory_limit_mb > 0) {
-        const memLimitGB = (sleeve.memory_limit_mb / 1024).toFixed(1);
-        memPct = Math.round(resources.memory_percent || 0);
-        memDisplay = `${memUsedGB} / ${memLimitGB} GB`;
-    } else {
-        memDisplay = `${memUsedGB} GB of host`;
-        memPct = 0;
-        if (hostStatsCache && hostStatsCache.memory && hostStatsCache.memory.total_bytes > 0) {
-            memPct = Math.round((memUsedBytes / hostStatsCache.memory.total_bytes) * 100);
-        }
-    }
-
-    if (constrained && sleeve.cpu_limit > 0) {
-        cpuDisplay = `${cpuPct}% of ${sleeve.cpu_limit} cores`;
-    } else {
-        cpuDisplay = `${cpuPct}% of host`;
-    }
-
-    return { memDisplay, memPct, cpuDisplay, cpuPct };
-}
-
-function getHealthClass(integrity) {
-    if (integrity >= 80) return 'healthy';
-    if (integrity >= 50) return 'warning';
-    return 'critical';
 }
 
 function renderSpawningCard(pending) {

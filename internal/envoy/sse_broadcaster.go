@@ -207,6 +207,13 @@ func (b *SSEBroadcaster) enrichSleeves(ctx context.Context, sleeves []*protocol.
 
 // hashSleeve creates a hash of sleeve state for change detection
 func (b *SSEBroadcaster) hashSleeve(s *protocol.SleeveInfo) string {
+	var memUsed uint64
+	var cpuPct float64
+	if s.Resources != nil {
+		memUsed = s.Resources.MemoryUsedBytes
+		cpuPct = s.Resources.CPUPercent
+	}
+
 	data, _ := json.Marshal(struct {
 		Name           string
 		Status         string
@@ -223,24 +230,10 @@ func (b *SSEBroadcaster) hashSleeve(s *protocol.SleeveInfo) string {
 		SidecarHealthy: s.SidecarHealthy,
 		DHF:            s.DHF,
 		DHFVersion:     s.DHFVersion,
-		MemUsed:        getMemUsed(s.Resources),
-		CPUPct:         getCPUPct(s.Resources),
+		MemUsed:        memUsed,
+		CPUPct:         cpuPct,
 	})
 	return hashString(string(data))
-}
-
-func getMemUsed(r *protocol.ContainerResourceStats) uint64 {
-	if r == nil {
-		return 0
-	}
-	return r.MemoryUsedBytes
-}
-
-func getCPUPct(r *protocol.ContainerResourceStats) float64 {
-	if r == nil {
-		return 0
-	}
-	return r.CPUPercent
 }
 
 func hashString(s string) string {
