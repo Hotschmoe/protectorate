@@ -11,20 +11,14 @@ import (
 	"github.com/hotschmoe/protectorate/internal/protocol"
 )
 
-// ServerDockerClient defines Docker operations needed by Server
+// ServerDockerClient defines Docker operations needed by Server.
+// Composes multiple focused interfaces for different Server responsibilities.
 type ServerDockerClient interface {
-	ListContainers() ([]ContainerInfo, error)
-	ListNetworks() ([]NetworkInfo, error)
-	GetContainerStats(ctx context.Context, containerID string) (*protocol.ContainerResourceStats, error)
+	DockerListClient
+	DockerContainerStatsClient
+	DockerPingClient
+	DockerExecClient
 	GetContainerByName(name string) (*types.Container, error)
-	Ping(ctx context.Context) error
-	ExecAttach(ctx context.Context, opts ExecAttachOptions) (*ExecSession, error)
-	ExecResize(ctx context.Context, execID string, cols, rows uint) error
-}
-
-// ServerSidecarClient defines sidecar operations needed by Server
-type ServerSidecarClient interface {
-	BatchGetStatus(containerNames []string) map[string]*SidecarStatus
 }
 
 // ServerSleeveManager defines sleeve operations needed by Server
@@ -75,7 +69,7 @@ type Server struct {
 	cfg         *config.EnvoyConfig
 	http        *http.Server
 	docker      ServerDockerClient
-	sidecar     ServerSidecarClient
+	sidecar     SidecarStatusClient
 	sleeves     ServerSleeveManager
 	workspaces  ServerWorkspaceManager
 	agentDoctor *AgentDoctorManager

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -28,14 +27,11 @@ func TestSidecarClient_GetStatus_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Extract host:port from server URL
-	addr := strings.TrimPrefix(server.URL, "http://")
 	client := &SidecarClient{
 		http:    &http.Client{Timeout: 5 * time.Second},
 		network: "test",
 	}
 
-	// Override URL for testing
 	url := server.URL + "/status"
 	resp, err := client.http.Get(url)
 	if err != nil {
@@ -54,8 +50,6 @@ func TestSidecarClient_GetStatus_Success(t *testing.T) {
 	if status.DHF == nil || status.DHF.Name != "claude" {
 		t.Errorf("DHF = %v, want name='claude'", status.DHF)
 	}
-
-	_ = addr // Use the variable to suppress lint warning
 }
 
 func TestSidecarClient_GetStatus_NonOKStatus(t *testing.T) {

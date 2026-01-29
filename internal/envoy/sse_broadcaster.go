@@ -11,33 +11,14 @@ import (
 	"github.com/hotschmoe/protectorate/internal/protocol"
 )
 
-// BroadcasterSleeveManager defines sleeve operations needed by SSEBroadcaster
-type BroadcasterSleeveManager interface {
-	List() []*protocol.SleeveInfo
-}
-
-// BroadcasterSidecarClient defines sidecar operations needed by SSEBroadcaster
-type BroadcasterSidecarClient interface {
-	BatchGetStatus(containerNames []string) map[string]*SidecarStatus
-}
-
-// BroadcasterDockerClient defines Docker operations needed by SSEBroadcaster
-type BroadcasterDockerClient interface {
-	GetContainerStats(ctx context.Context, containerID string) (*protocol.ContainerResourceStats, error)
-}
-
-// BroadcasterHostStats defines host stats operations needed by SSEBroadcaster
-type BroadcasterHostStats interface {
-	GetStats(ctx context.Context) *protocol.HostStats
-}
 
 // SSEBroadcaster polls for changes and broadcasts updates to SSE clients
 type SSEBroadcaster struct {
-	hub       *SSEHub
-	sleeves   BroadcasterSleeveManager
-	sidecar   BroadcasterSidecarClient
-	docker    BroadcasterDockerClient
-	hostStats BroadcasterHostStats
+	hub        *SSEHub
+	sleeves    SleeveListProvider
+	sidecar    SidecarStatusClient
+	docker     DockerContainerStatsClient
+	hostStats  HostStatsProvider
 	workspaces *WorkspaceManager
 
 	mu             sync.RWMutex
@@ -47,7 +28,7 @@ type SSEBroadcaster struct {
 }
 
 // NewSSEBroadcaster creates a new SSE broadcaster
-func NewSSEBroadcaster(hub *SSEHub, sleeves BroadcasterSleeveManager, sidecar BroadcasterSidecarClient, docker BroadcasterDockerClient, hostStats BroadcasterHostStats, workspaces *WorkspaceManager) *SSEBroadcaster {
+func NewSSEBroadcaster(hub *SSEHub, sleeves SleeveListProvider, sidecar SidecarStatusClient, docker DockerContainerStatsClient, hostStats HostStatsProvider, workspaces *WorkspaceManager) *SSEBroadcaster {
 	return &SSEBroadcaster{
 		hub:           hub,
 		sleeves:       sleeves,

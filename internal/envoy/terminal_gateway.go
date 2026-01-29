@@ -12,11 +12,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// TerminalDockerClient defines Docker operations needed by TerminalGateway
-type TerminalDockerClient interface {
-	ExecAttach(ctx context.Context, opts ExecAttachOptions) (*ExecSession, error)
-	ExecResize(ctx context.Context, execID string, cols, rows uint) error
-}
 
 const (
 	msgData   = 0x30 // '0' - input/output data
@@ -37,7 +32,7 @@ var terminalUpgrader = websocket.Upgrader{
 
 // TerminalGateway bridges a WebSocket connection to a Docker exec session
 type TerminalGateway struct {
-	docker       TerminalDockerClient
+	docker       DockerExecClient
 	container    string
 	socketPath   string
 	readOnly     bool
@@ -63,7 +58,7 @@ type TerminalResizeMessage struct {
 }
 
 // NewTerminalGateway creates a new terminal gateway
-func NewTerminalGateway(docker TerminalDockerClient, container, socketPath string, readOnly bool) *TerminalGateway {
+func NewTerminalGateway(docker DockerExecClient, container, socketPath string, readOnly bool) *TerminalGateway {
 	return &TerminalGateway{
 		docker:     docker,
 		container:  container,

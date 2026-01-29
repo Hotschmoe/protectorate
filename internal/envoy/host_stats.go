@@ -13,15 +13,11 @@ import (
 	"github.com/hotschmoe/protectorate/internal/protocol"
 )
 
-// HostStatsDockerClient defines Docker operations needed by HostStatsCollector
-type HostStatsDockerClient interface {
-	GetContainerCounts(ctx context.Context) (*ContainerCounts, error)
-}
 
 // HostStatsCollector gathers host system statistics
 type HostStatsCollector struct {
 	procPath      string
-	docker        HostStatsDockerClient
+	docker        DockerContainerCountsClient
 	maxContainers int
 
 	mu            sync.Mutex
@@ -49,7 +45,7 @@ func (c *cpuRawStats) active() uint64 {
 }
 
 // NewHostStatsCollector creates a new host stats collector
-func NewHostStatsCollector(docker HostStatsDockerClient, maxContainers int) *HostStatsCollector {
+func NewHostStatsCollector(docker DockerContainerCountsClient, maxContainers int) *HostStatsCollector {
 	procPath := "/host/proc"
 	if _, err := os.Stat(procPath); os.IsNotExist(err) {
 		procPath = "/proc"
