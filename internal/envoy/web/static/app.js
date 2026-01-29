@@ -1053,11 +1053,6 @@ function hideSpawnModal() {
     hideSpawnLoading();
 }
 
-function showSpawnLoading(msg) {
-    document.querySelector('.spawn-loading-text').textContent = msg || 'Spawning sleeve...';
-    document.getElementById('spawn-loading').classList.add('active');
-}
-
 function hideSpawnLoading() {
     document.getElementById('spawn-loading').classList.remove('active');
 }
@@ -1089,7 +1084,6 @@ function hideCloneLoading() {
 function showCreateWorkspaceModal() {
     document.getElementById('create-workspace-modal').classList.add('active');
     document.getElementById('create-workspace-error').classList.add('hidden');
-    document.getElementById('create-workspace-name').value = '';
 }
 
 function hideCreateWorkspaceModal() {
@@ -1100,8 +1094,7 @@ function hideCreateWorkspaceModal() {
 
 async function createWorkspace(e) {
     e.preventDefault();
-    const nameInput = document.getElementById('create-workspace-name');
-    const name = nameInput.value.trim();
+    const name = document.getElementById('create-workspace-name').value.trim();
 
     if (!name) {
         document.getElementById('create-workspace-error').textContent = 'Please enter a workspace name';
@@ -1125,8 +1118,6 @@ async function createWorkspace(e) {
             const err = await resp.text();
             document.getElementById('create-workspace-error').textContent = err;
             document.getElementById('create-workspace-error').classList.remove('hidden');
-            btn.textContent = originalText;
-            btn.disabled = false;
             return;
         }
 
@@ -1137,6 +1128,7 @@ async function createWorkspace(e) {
     } catch (err) {
         document.getElementById('create-workspace-error').textContent = err.message;
         document.getElementById('create-workspace-error').classList.remove('hidden');
+    } finally {
         btn.textContent = originalText;
         btn.disabled = false;
     }
@@ -1230,7 +1222,6 @@ async function spawnSleeve(e) {
             message: 'Spawning sleeve...'
         });
 
-        hideSpawnLoading();
         hideSpawnModal();
         renderPendingSpawns();
 
@@ -1257,7 +1248,6 @@ async function spawnSleeve(e) {
             removePendingSpawn(pendingId);
             renderPendingSpawns();
         }
-        hideSpawnLoading();
         console.error('Failed to spawn sleeve:', err);
         notify.error('Failed to spawn sleeve', { detail: err.message });
     }
