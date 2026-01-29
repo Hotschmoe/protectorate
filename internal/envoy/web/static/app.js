@@ -1412,6 +1412,14 @@ function connectSSE() {
         }
     };
 
+    // Handle connected event (immediate response before data loads)
+    sseSource.addEventListener('connected', (e) => {
+        const grid = document.getElementById('sleeves-grid');
+        if (grid) {
+            grid.innerHTML = '<div class="empty-state"><span class="inline-spinner"></span> Loading sleeves...</div>';
+        }
+    });
+
     // Handle init event
     sseSource.addEventListener('init', (e) => {
         const grid = document.getElementById('sleeves-grid');

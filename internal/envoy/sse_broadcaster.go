@@ -198,6 +198,25 @@ func (b *SSEBroadcaster) enrichSleeves(ctx context.Context, sleeves []*protocol.
 
 	sidecarStatuses := b.sidecar.BatchGetStatus(containerNames)
 
+	// Fetch container stats concurrently
+	var statsWg sync.WaitGroup
+	var statsMu sync.Mutex
+	statsMap := make(map[string]*protocol.ContainerResourceStats)
+
+	for _, sleeve := range sleeves {
+		statsWg.Add(1)
+		go func(containerID string) {
+			defer statsWg.Done()
+			if stats, err := b.docker.GetContainerStats(ctx, containerID); err == nil {
+				statsMu.Lock()
+				statsMap[containerID] = stats
+				statsMu.Unlock()
+			}
+		}(sleeve.ContainerID)
+	}
+	statsWg.Wait()
+
+	// Apply sidecar status and stats to sleeves
 	for _, sleeve := range sleeves {
 		sleeve.Integrity = 100.0
 
@@ -212,7 +231,7 @@ func (b *SSEBroadcaster) enrichSleeves(ctx context.Context, sleeves []*protocol.
 			}
 		}
 
-		if stats, err := b.docker.GetContainerStats(ctx, sleeve.ContainerID); err == nil {
+		if stats, ok := statsMap[sleeve.ContainerID]; ok {
 			sleeve.Resources = stats
 		}
 	}

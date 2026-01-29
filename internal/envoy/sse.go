@@ -129,6 +129,11 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		s.sseHub.unregister <- client
 	}()
 
+	// Send immediate connected event so client knows SSE is working
+	fmt.Fprintf(w, "event: connected\n")
+	fmt.Fprintf(w, "data: {}\n\n")
+	flusher.Flush()
+
 	// Request initial state from broadcaster
 	s.broadcaster.RequestInit()
 
