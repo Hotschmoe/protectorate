@@ -1,45 +1,86 @@
 package config
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
+
+const DefaultConfigPath = "/home/agent/.config/envoy.yaml"
 
 // EnvoyConfig defines the configuration for the Envoy manager service.
 type EnvoyConfig struct {
-	PollInterval  time.Duration
-	IdleThreshold time.Duration
-	MaxSleeves    int
-	Port          int
-	Docker        DockerConfig
-	Gitea         GiteaConfig
-	Mirror        MirrorConfig
+	mu         sync.RWMutex `yaml:"-"`
+	configPath string       `yaml:"-"`
+
+	Server  ServerConfig  `yaml:"server"`
+	Sleeves SleevesConfig `yaml:"sleeves"`
+	Docker  DockerConfig  `yaml:"docker"`
+	Git     GitConfig     `yaml:"git"`
+	Gitea   GiteaConfig   `yaml:"gitea,omitempty"`
+	Mirror  MirrorConfig  `yaml:"mirror,omitempty"`
+
+	// Legacy fields for backwards compatibility during transition
+	PollInterval  time.Duration `yaml:"-"`
+	IdleThreshold time.Duration `yaml:"-"`
+	MaxSleeves    int           `yaml:"-"`
+	Port          int           `yaml:"-"`
+}
+
+// ServerConfig defines HTTP server settings.
+type ServerConfig struct {
+	Port int `yaml:"port"`
+}
+
+// SleevesConfig defines sleeve management settings.
+type SleevesConfig struct {
+	Max           int    `yaml:"max"`
+	PollInterval  string `yaml:"poll_interval"`
+	IdleThreshold string `yaml:"idle_threshold"`
+	Image         string `yaml:"image"`
 }
 
 // DockerConfig defines Docker-specific configuration.
 type DockerConfig struct {
-	Network         string
-	WorkspaceRoot   string
-	SleeveImage     string
-	WorkspaceVolume string
-	CredsVolume     string
+	Network         string `yaml:"network"`
+	WorkspaceRoot   string `yaml:"workspace_root"`
+	SleeveImage     string `yaml:"-"` // Deprecated: use Sleeves.Image
+	WorkspaceVolume string `yaml:"-"` // Internal only
+	CredsVolume     string `yaml:"-"` // Internal only
+}
+
+// GitConfig defines git-related settings.
+type GitConfig struct {
+	CloneProtocol string          `yaml:"clone_protocol"`
+	Committer     CommitterConfig `yaml:"committer"`
+}
+
+// CommitterConfig defines git committer identity.
+type CommitterConfig struct {
+	Name  string `yaml:"name"`
+	Email string `yaml:"email"`
 }
 
 // GiteaConfig defines Gitea configuration.
 type GiteaConfig struct {
-	URL      string
-	User     string
-	Password string
-	Token    string
+	Enabled  bool   `yaml:"enabled"`
+	URL      string `yaml:"url,omitempty"`
+	User     string `yaml:"user,omitempty"`
+	Password string `yaml:"-"` // Never persist passwords
+	Token    string `yaml:"-"` // Never persist tokens in YAML
 }
 
 // MirrorConfig defines GitHub mirror configuration.
 type MirrorConfig struct {
-	Enabled   bool
-	Frequency string
-	GitHubOrg string
-	Token     string
+	Enabled   bool   `yaml:"enabled"`
+	Frequency string `yaml:"frequency,omitempty"`
+	GitHubOrg string `yaml:"github_org,omitempty"`
+	Token     string `yaml:"-"` // Never persist tokens in YAML
 }
 
 // getEnv returns the environment variable value or a default.
@@ -60,16 +101,6 @@ func getEnvInt(key string, defaultVal int) int {
 	return defaultVal
 }
 
-// getEnvDuration returns the environment variable as duration or a default.
-func getEnvDuration(key string, defaultVal time.Duration) time.Duration {
-	if val := os.Getenv(key); val != "" {
-		if d, err := time.ParseDuration(val); err == nil {
-			return d
-		}
-	}
-	return defaultVal
-}
-
 // getEnvBool returns the environment variable as bool or a default.
 func getEnvBool(key string, defaultVal bool) bool {
 	if val := os.Getenv(key); val != "" {
@@ -80,55 +111,173 @@ func getEnvBool(key string, defaultVal bool) bool {
 	return defaultVal
 }
 
-// LoadEnvoyConfig loads configuration from environment variables with sensible defaults.
-// All settings can be overridden via environment variables.
-//
-// Environment variables:
-//
-//	ENVOY_PORT              - HTTP server port (default: 7470)
-//	ENVOY_POLL_INTERVAL     - Sleeve poll interval (default: 1h)
-//	ENVOY_IDLE_THRESHOLD    - Idle timeout, 0 = never (default: 0)
-//	ENVOY_MAX_SLEEVES       - Maximum concurrent sleeves (default: 10)
-//
-//	DOCKER_NETWORK          - Docker network name (default: raven)
-//	WORKSPACE_ROOT          - Container path for workspaces (default: /home/agent/workspaces)
-//	SLEEVE_IMAGE            - Docker image for sleeves (default: ghcr.io/hotschmoe/protectorate-sleeve:latest)
-//	WORKSPACE_VOLUME        - Docker volume for workspaces (default: agent-workspaces)
-//	CREDS_VOLUME            - Docker volume for credentials (default: agent-creds)
-//
-//	GITEA_URL               - Gitea server URL (default: http://gitea:3000)
-//	GITEA_USER              - Gitea username
-//	GITEA_PASSWORD          - Gitea password
-//	GITEA_TOKEN             - Gitea API token
-//
-//	MIRROR_ENABLED          - Enable GitHub mirroring (default: false)
-//	MIRROR_FREQUENCY        - Mirror frequency (default: daily)
-//	MIRROR_GITHUB_ORG       - GitHub organization to mirror
-//	MIRROR_GITHUB_TOKEN     - GitHub API token for mirroring
+// parseDuration parses a duration string, returning the default if empty or invalid.
+func parseDuration(s string, defaultVal time.Duration) time.Duration {
+	if s == "" {
+		return defaultVal
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return defaultVal
+	}
+	return d
+}
+
+// LoadEnvoyConfig loads configuration with precedence: env vars > YAML file > defaults.
+// The YAML file is stored in the agent-config volume at /home/agent/.config/envoy.yaml.
 func LoadEnvoyConfig() *EnvoyConfig {
-	return &EnvoyConfig{
-		Port:          getEnvInt("ENVOY_PORT", 7470),
-		PollInterval:  getEnvDuration("ENVOY_POLL_INTERVAL", 1*time.Hour),
-		IdleThreshold: getEnvDuration("ENVOY_IDLE_THRESHOLD", 0),
-		MaxSleeves:    getEnvInt("ENVOY_MAX_SLEEVES", 10),
-		Docker: DockerConfig{
-			Network:         getEnv("DOCKER_NETWORK", "raven"),
-			WorkspaceRoot:   getEnv("WORKSPACE_ROOT", "/home/agent/workspaces"),
-			SleeveImage:     getEnv("SLEEVE_IMAGE", "ghcr.io/hotschmoe/protectorate-sleeve:latest"),
-			WorkspaceVolume: getEnv("WORKSPACE_VOLUME", "agent-workspaces"),
-			CredsVolume:     getEnv("CREDS_VOLUME", "agent-creds"),
-		},
-		Gitea: GiteaConfig{
-			URL:      getEnv("GITEA_URL", "http://gitea:3000"),
-			User:     getEnv("GITEA_USER", ""),
-			Password: getEnv("GITEA_PASSWORD", ""),
-			Token:    getEnv("GITEA_TOKEN", ""),
-		},
-		Mirror: MirrorConfig{
-			Enabled:   getEnvBool("MIRROR_ENABLED", false),
-			Frequency: getEnv("MIRROR_FREQUENCY", "daily"),
-			GitHubOrg: getEnv("MIRROR_GITHUB_ORG", ""),
-			Token:     getEnv("MIRROR_GITHUB_TOKEN", ""),
+	cfg := &EnvoyConfig{configPath: DefaultConfigPath}
+	cfg.applyDefaults()
+	cfg.loadFromYAML()
+	cfg.applyEnvOverrides()
+	cfg.syncLegacyFields()
+	return cfg
+}
+
+// applyDefaults sets all configuration to default values.
+func (c *EnvoyConfig) applyDefaults() {
+	c.Server = ServerConfig{
+		Port: 7470,
+	}
+	c.Sleeves = SleevesConfig{
+		Max:           10,
+		PollInterval:  "1h",
+		IdleThreshold: "0",
+		Image:         "ghcr.io/hotschmoe/protectorate-sleeve:latest",
+	}
+	c.Docker = DockerConfig{
+		Network:         "raven",
+		WorkspaceRoot:   "/home/agent/workspaces",
+		WorkspaceVolume: "agent-workspaces",
+		CredsVolume:     "agent-creds",
+	}
+	c.Git = GitConfig{
+		CloneProtocol: "ssh",
+		Committer: CommitterConfig{
+			Name:  "",
+			Email: "",
 		},
 	}
+	c.Gitea = GiteaConfig{
+		Enabled: false,
+		URL:     "http://gitea:3000",
+	}
+	c.Mirror = MirrorConfig{
+		Enabled:   false,
+		Frequency: "daily",
+	}
+}
+
+// loadFromYAML reads configuration from the YAML file if it exists.
+func (c *EnvoyConfig) loadFromYAML() {
+	data, err := os.ReadFile(c.configPath)
+	if err != nil {
+		return // File doesn't exist or unreadable - use defaults
+	}
+	// Unmarshal into the config, overwriting defaults
+	yaml.Unmarshal(data, c)
+}
+
+// applyEnvOverrides applies environment variable overrides (highest precedence).
+func (c *EnvoyConfig) applyEnvOverrides() {
+	if val := os.Getenv("ENVOY_PORT"); val != "" {
+		c.Server.Port = getEnvInt("ENVOY_PORT", c.Server.Port)
+	}
+	if val := os.Getenv("ENVOY_MAX_SLEEVES"); val != "" {
+		c.Sleeves.Max = getEnvInt("ENVOY_MAX_SLEEVES", c.Sleeves.Max)
+	}
+	if val := os.Getenv("ENVOY_POLL_INTERVAL"); val != "" {
+		c.Sleeves.PollInterval = val
+	}
+	if val := os.Getenv("ENVOY_IDLE_THRESHOLD"); val != "" {
+		c.Sleeves.IdleThreshold = val
+	}
+	if val := os.Getenv("SLEEVE_IMAGE"); val != "" {
+		c.Sleeves.Image = val
+	}
+	if val := os.Getenv("DOCKER_NETWORK"); val != "" {
+		c.Docker.Network = val
+	}
+	if val := os.Getenv("WORKSPACE_ROOT"); val != "" {
+		c.Docker.WorkspaceRoot = val
+	}
+	if val := os.Getenv("WORKSPACE_VOLUME"); val != "" {
+		c.Docker.WorkspaceVolume = val
+	}
+	if val := os.Getenv("CREDS_VOLUME"); val != "" {
+		c.Docker.CredsVolume = val
+	}
+	if val := os.Getenv("GIT_CLONE_PROTOCOL"); val != "" {
+		c.Git.CloneProtocol = val
+	}
+	// Gitea/Mirror env overrides for backwards compatibility
+	if val := os.Getenv("GITEA_URL"); val != "" {
+		c.Gitea.URL = val
+	}
+	if val := os.Getenv("GITEA_USER"); val != "" {
+		c.Gitea.User = val
+	}
+	if val := os.Getenv("GITEA_PASSWORD"); val != "" {
+		c.Gitea.Password = val
+	}
+	if val := os.Getenv("GITEA_TOKEN"); val != "" {
+		c.Gitea.Token = val
+	}
+	c.Gitea.Enabled = getEnvBool("GITEA_ENABLED", c.Gitea.Enabled)
+	c.Mirror.Enabled = getEnvBool("MIRROR_ENABLED", c.Mirror.Enabled)
+	if val := os.Getenv("MIRROR_FREQUENCY"); val != "" {
+		c.Mirror.Frequency = val
+	}
+	if val := os.Getenv("MIRROR_GITHUB_ORG"); val != "" {
+		c.Mirror.GitHubOrg = val
+	}
+	if val := os.Getenv("MIRROR_GITHUB_TOKEN"); val != "" {
+		c.Mirror.Token = val
+	}
+}
+
+// syncLegacyFields populates the old flat fields for backwards compatibility.
+func (c *EnvoyConfig) syncLegacyFields() {
+	c.Port = c.Server.Port
+	c.MaxSleeves = c.Sleeves.Max
+	c.PollInterval = parseDuration(c.Sleeves.PollInterval, time.Hour)
+	c.IdleThreshold = parseDuration(c.Sleeves.IdleThreshold, 0)
+	c.Docker.SleeveImage = c.Sleeves.Image
+}
+
+// Save persists the current configuration to the YAML file.
+func (c *EnvoyConfig) Save() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Ensure directory exists
+	dir := filepath.Dir(c.configPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	// Write with header comment
+	header := "# Protectorate Envoy Configuration\n# Modify via WebUI or CLI: envoy config set <key> <value>\n# Changes require envoy restart to take effect.\n\n"
+	content := []byte(header + string(data))
+
+	if err := os.WriteFile(c.configPath, content, 0644); err != nil {
+		return fmt.Errorf("failed to write config: %w", err)
+	}
+
+	return nil
+}
+
+// GetPollInterval returns the poll interval as a duration.
+func (c *EnvoyConfig) GetPollInterval() time.Duration {
+	return parseDuration(c.Sleeves.PollInterval, time.Hour)
+}
+
+// GetIdleThreshold returns the idle threshold as a duration.
+func (c *EnvoyConfig) GetIdleThreshold() time.Duration {
+	return parseDuration(c.Sleeves.IdleThreshold, 0)
 }

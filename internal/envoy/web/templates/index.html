@@ -155,14 +155,252 @@
         <main class="main-content">
             <div class="dashboard-header">
                 <h1 class="dashboard-title">CONFIGURATION</h1>
+                <div class="dashboard-stats">
+                    <span id="config-save-status" class="config-save-status"></span>
+                </div>
             </div>
+
+            <!-- Authentication Section -->
             <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">AUTHENTICATION</span>
+                    <button class="btn" onclick="refreshAuthStatus()">Refresh</button>
+                </div>
                 <div class="panel-body">
-                    <div class="placeholder-content">
-                        <div class="placeholder-title">System Configuration</div>
-                        <div class="placeholder-desc">Envoy and sleeve configuration management. Coming soon.</div>
+                    <div class="config-section-desc">API keys and tokens for AI providers. Stored securely in the agent-creds volume.</div>
+                    <div class="config-grid">
+                        <!-- Claude -->
+                        <div class="config-item">
+                            <div class="config-item-header">
+                                <span class="config-label">Claude (Anthropic)</span>
+                                <span id="auth-claude-status" class="auth-status auth-status-unknown">checking...</span>
+                            </div>
+                            <div class="config-item-desc">API key (sk-ant-...) or use subscription OAuth via CLI</div>
+                            <div class="config-input-row">
+                                <input type="password" class="form-input config-input" id="auth-claude-key"
+                                       placeholder="sk-ant-api03-..." autocomplete="off">
+                                <button class="btn btn-sm" onclick="saveAuthKey('claude')">Save</button>
+                                <button class="btn btn-sm btn-danger" onclick="revokeAuth('claude')">Revoke</button>
+                            </div>
+                        </div>
+                        <!-- Gemini -->
+                        <div class="config-item">
+                            <div class="config-item-header">
+                                <span class="config-label">Gemini (Google)</span>
+                                <span id="auth-gemini-status" class="auth-status auth-status-unknown">checking...</span>
+                            </div>
+                            <div class="config-item-desc">API key from Google AI Studio</div>
+                            <div class="config-input-row">
+                                <input type="password" class="form-input config-input" id="auth-gemini-key"
+                                       placeholder="AIza..." autocomplete="off">
+                                <button class="btn btn-sm" onclick="saveAuthKey('gemini')">Save</button>
+                                <button class="btn btn-sm btn-danger" onclick="revokeAuth('gemini')">Revoke</button>
+                            </div>
+                        </div>
+                        <!-- Codex/OpenAI -->
+                        <div class="config-item">
+                            <div class="config-item-header">
+                                <span class="config-label">Codex (OpenAI)</span>
+                                <span id="auth-codex-status" class="auth-status auth-status-unknown">checking...</span>
+                            </div>
+                            <div class="config-item-desc">OpenAI API key</div>
+                            <div class="config-input-row">
+                                <input type="password" class="form-input config-input" id="auth-codex-key"
+                                       placeholder="sk-..." autocomplete="off">
+                                <button class="btn btn-sm" onclick="saveAuthKey('codex')">Save</button>
+                                <button class="btn btn-sm btn-danger" onclick="revokeAuth('codex')">Revoke</button>
+                            </div>
+                        </div>
+                        <!-- Git -->
+                        <div class="config-item">
+                            <div class="config-item-header">
+                                <span class="config-label">Git (SSH)</span>
+                                <span id="auth-git-status" class="auth-status auth-status-unknown">checking...</span>
+                            </div>
+                            <div class="config-item-desc">SSH key authentication for git operations</div>
+                            <div class="config-input-row">
+                                <span class="config-hint">Configure via CLI: docker exec envoy ssh-keygen</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Sleeves Section -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">SLEEVES</span>
+                </div>
+                <div class="panel-body">
+                    <div class="config-section-desc">Sleeve container management settings.</div>
+                    <div class="config-grid">
+                        <div class="config-item">
+                            <div class="config-item-header">
+                                <span class="config-label">Max Sleeves</span>
+                            </div>
+                            <div class="config-item-desc">Maximum concurrent sleeve containers (1-100)</div>
+                            <div class="config-input-row">
+                                <input type="number" class="form-input config-input" id="config-sleeves-max"
+                                       min="1" max="100" value="10">
+                                <button class="btn btn-sm" onclick="saveConfig('sleeves.max')">Save</button>
+                            </div>
+                        </div>
+                        <div class="config-item">
+                            <div class="config-item-header">
+                                <span class="config-label">Poll Interval</span>
+                            </div>
+                            <div class="config-item-desc">How often to poll sleeve health (e.g., 1h, 30m, 5m)</div>
+                            <div class="config-input-row">
+                                <input type="text" class="form-input config-input" id="config-sleeves-poll_interval"
+                                       placeholder="1h" value="1h">
+                                <button class="btn btn-sm" onclick="saveConfig('sleeves.poll_interval')">Save</button>
+                            </div>
+                        </div>
+                        <div class="config-item">
+                            <div class="config-item-header">
+                                <span class="config-label">Idle Threshold</span>
+                            </div>
+                            <div class="config-item-desc">Auto-kill sleeves after this idle time (0 = never)</div>
+                            <div class="config-input-row">
+                                <input type="text" class="form-input config-input" id="config-sleeves-idle_threshold"
+                                       placeholder="0" value="0">
+                                <button class="btn btn-sm" onclick="saveConfig('sleeves.idle_threshold')">Save</button>
+                            </div>
+                        </div>
+                        <div class="config-item">
+                            <div class="config-item-header">
+                                <span class="config-label">Sleeve Image</span>
+                            </div>
+                            <div class="config-item-desc">Docker image for sleeves</div>
+                            <div class="config-input-row">
+                                <input type="text" class="form-input config-input" id="config-sleeves-image"
+                                       placeholder="ghcr.io/hotschmoe/protectorate-sleeve:latest">
+                                <button class="btn btn-sm" onclick="saveConfig('sleeves.image')">Save</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Git Section -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">GIT</span>
+                </div>
+                <div class="panel-body">
+                    <div class="config-section-desc">Git configuration for clone operations and commits.</div>
+                    <div class="config-grid">
+                        <div class="config-item">
+                            <div class="config-item-header">
+                                <span class="config-label">Clone Protocol</span>
+                            </div>
+                            <div class="config-item-desc">Default protocol for cloning repositories</div>
+                            <div class="config-input-row">
+                                <select class="form-select config-input" id="config-git-clone_protocol">
+                                    <option value="ssh">SSH</option>
+                                    <option value="https">HTTPS</option>
+                                </select>
+                                <button class="btn btn-sm" onclick="saveConfig('git.clone_protocol')">Save</button>
+                            </div>
+                        </div>
+                        <div class="config-item">
+                            <div class="config-item-header">
+                                <span class="config-label">Committer Name</span>
+                            </div>
+                            <div class="config-item-desc">Git user.name for commits made by sleeves</div>
+                            <div class="config-input-row">
+                                <input type="text" class="form-input config-input" id="config-git-committer-name"
+                                       placeholder="Your Name">
+                                <button class="btn btn-sm" onclick="saveConfig('git.committer.name')">Save</button>
+                            </div>
+                        </div>
+                        <div class="config-item">
+                            <div class="config-item-header">
+                                <span class="config-label">Committer Email</span>
+                            </div>
+                            <div class="config-item-desc">Git user.email for commits made by sleeves</div>
+                            <div class="config-input-row">
+                                <input type="text" class="form-input config-input" id="config-git-committer-email"
+                                       placeholder="you@example.com">
+                                <button class="btn btn-sm" onclick="saveConfig('git.committer.email')">Save</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Docker Section (read-only) -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">DOCKER</span>
+                    <span class="panel-badge">Read-Only</span>
+                </div>
+                <div class="panel-body">
+                    <div class="config-section-desc">Docker settings (set via environment variables at startup).</div>
+                    <div class="config-grid">
+                        <div class="config-item">
+                            <div class="config-item-header">
+                                <span class="config-label">Network</span>
+                            </div>
+                            <div class="config-item-desc">Docker network for envoy and sleeves</div>
+                            <div class="config-input-row">
+                                <input type="text" class="form-input config-input config-readonly" id="config-docker-network"
+                                       readonly>
+                            </div>
+                        </div>
+                        <div class="config-item">
+                            <div class="config-item-header">
+                                <span class="config-label">Workspace Root</span>
+                            </div>
+                            <div class="config-item-desc">Container path for workspaces</div>
+                            <div class="config-input-row">
+                                <input type="text" class="form-input config-input config-readonly" id="config-docker-workspace_root"
+                                       readonly>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Server Section -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">SERVER</span>
+                    <span class="panel-badge">Read-Only</span>
+                </div>
+                <div class="panel-body">
+                    <div class="config-section-desc">Envoy server settings (requires restart to change).</div>
+                    <div class="config-grid">
+                        <div class="config-item">
+                            <div class="config-item-header">
+                                <span class="config-label">Port</span>
+                            </div>
+                            <div class="config-item-desc">HTTP server port</div>
+                            <div class="config-input-row">
+                                <input type="number" class="form-input config-input config-readonly" id="config-server-port"
+                                       readonly>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gitea/Mirror Section (Coming Soon) -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">INTEGRATIONS</span>
+                    <span class="panel-badge">Coming Soon</span>
+                </div>
+                <div class="panel-body">
+                    <div class="placeholder-content">
+                        <div class="placeholder-title">Gitea & GitHub Mirror</div>
+                        <div class="placeholder-desc">Self-hosted Gitea integration and GitHub repository mirroring. Configuration coming soon.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="config-footer">
+                <span class="config-hint">Changes require envoy restart to take effect. Config stored at /home/agent/.config/envoy.yaml</span>
             </div>
         </main>
     </div>

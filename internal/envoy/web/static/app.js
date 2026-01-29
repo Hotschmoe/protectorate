@@ -140,6 +140,9 @@ function switchTab(tabName) {
         refreshDoctor();
     } else if (tabName === 'needlecast') {
         updateNeedlecastSleeveList();
+    } else if (tabName === 'config') {
+        refreshConfig();
+        refreshAuthStatus();
     }
 }
 
@@ -1469,6 +1472,175 @@ function connectSSE() {
         handleCloneProgress(data);
     });
 }
+
+// ============================================================================
+// CONFIG TAB
+// ============================================================================
+
+async function refreshConfig() {
+    try {
+        const resp = await fetch('/api/config');
+        if (!resp.ok) throw new Error('Failed to fetch config');
+        const config = await resp.json();
+
+        // Populate sleeves settings
+        setInputValue('config-sleeves-max', config.sleeves?.max);
+        setInputValue('config-sleeves-poll_interval', config.sleeves?.poll_interval);
+        setInputValue('config-sleeves-idle_threshold', config.sleeves?.idle_threshold);
+        setInputValue('config-sleeves-image', config.sleeves?.image);
+
+        // Populate docker settings (read-only)
+        setInputValue('config-docker-network', config.docker?.network);
+        setInputValue('config-docker-workspace_root', config.docker?.workspace_root);
+
+        // Populate git settings
+        setInputValue('config-git-clone_protocol', config.git?.clone_protocol);
+        setInputValue('config-git-committer-name', config.git?.committer?.name || '');
+        setInputValue('config-git-committer-email', config.git?.committer?.email || '');
+
+        // Populate server settings (read-only)
+        setInputValue('config-server-port', config.server?.port);
+    } catch (err) {
+        console.error('Failed to refresh config:', err);
+        notify.error('Config Error', 'Failed to load configuration');
+    }
+}
+
+function setInputValue(id, value) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.value = value ?? '';
+    }
+}
+
+async function saveConfig(key) {
+    const inputId = 'config-' + key.replace(/\./g, '-');
+    const input = document.getElementById(inputId);
+    if (!input) {
+        notify.error('Config Error', `Input not found for ${key}`);
+        return;
+    }
+
+    const value = input.value;
+    const statusEl = document.getElementById('config-save-status');
+
+    try {
+        const resp = await fetch(`/api/config/${key}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value: String(value) })
+        });
+
+        if (!resp.ok) {
+            const errText = await resp.text();
+            throw new Error(errText);
+        }
+
+        const result = await resp.json();
+        if (statusEl) {
+            statusEl.textContent = 'Saved - restart required';
+            statusEl.className = 'config-save-status saved';
+            setTimeout(() => { statusEl.textContent = ''; }, 3000);
+        }
+        notify.success('Config Saved', `${key} = ${result.value}`);
+    } catch (err) {
+        if (statusEl) {
+            statusEl.textContent = 'Save failed';
+            statusEl.className = 'config-save-status error';
+        }
+        notify.error('Config Error', err.message);
+    }
+}
+
+async function refreshAuthStatus() {
+    try {
+        const resp = await fetch('/api/auth/status');
+        if (!resp.ok) throw new Error('Failed to fetch auth status');
+        const status = await resp.json();
+
+        updateAuthBadge('claude', status.providers?.claude);
+        updateAuthBadge('gemini', status.providers?.gemini);
+        updateAuthBadge('codex', status.providers?.codex);
+        updateAuthBadge('git', status.providers?.git);
+    } catch (err) {
+        console.error('Failed to refresh auth status:', err);
+    }
+}
+
+function updateAuthBadge(provider, info) {
+    const badge = document.getElementById(`auth-${provider}-status`);
+    if (!badge) return;
+
+    if (!info) {
+        badge.className = 'auth-status auth-status-unknown';
+        badge.textContent = 'unknown';
+        return;
+    }
+
+    if (info.authenticated) {
+        badge.className = 'auth-status auth-status-authenticated';
+        badge.textContent = info.method || 'authenticated';
+    } else {
+        badge.className = 'auth-status auth-status-missing';
+        badge.textContent = 'not configured';
+    }
+}
+
+async function saveAuthKey(provider) {
+    const input = document.getElementById(`auth-${provider}-key`);
+    if (!input) return;
+
+    const token = input.value.trim();
+    if (!token) {
+        notify.error('Auth Error', 'Please enter an API key');
+        return;
+    }
+
+    try {
+        const resp = await fetch(`/api/auth/${provider}/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+        });
+
+        const result = await resp.json();
+        if (!resp.ok || !result.success) {
+            throw new Error(result.error || 'Failed to save credentials');
+        }
+
+        input.value = '';
+        notify.success('Auth Saved', `${provider} credentials saved successfully`);
+        refreshAuthStatus();
+    } catch (err) {
+        notify.error('Auth Error', err.message);
+    }
+}
+
+async function revokeAuth(provider) {
+    if (!confirm(`Revoke ${provider} credentials? This cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const resp = await fetch(`/api/auth/${provider}`, {
+            method: 'DELETE'
+        });
+
+        const result = await resp.json();
+        if (!resp.ok || !result.success) {
+            throw new Error(result.error || 'Failed to revoke credentials');
+        }
+
+        notify.success('Auth Revoked', `${provider} credentials removed`);
+        refreshAuthStatus();
+    } catch (err) {
+        notify.error('Auth Error', err.message);
+    }
+}
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
 
 // Initialize on page load
 connectSSE();
