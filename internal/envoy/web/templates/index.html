@@ -414,8 +414,9 @@
             <div class="panel">
                 <div class="panel-header">
                     <span class="panel-title">WORKSPACES</span>
-                    <div style="display: flex; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
                         <span id="fetch-indicator" class="fetch-indicator" style="display: none;">fetching...</span>
+                        <button class="btn btn-primary" onclick="showCreateWorkspaceModal()">+ Create Workspace</button>
                         <button class="btn btn-primary" onclick="showCloneModal()">+ Clone from Git</button>
                     </div>
                 </div>
@@ -435,7 +436,7 @@
                         <tbody></tbody>
                     </table>
                     <div id="workspaces-empty" class="empty-state hidden">
-                        No workspaces yet. Click "+ Clone from Git" to clone a repository.
+                        No workspaces yet. Create a new workspace or clone from Git.
                     </div>
                 </div>
             </div>
@@ -469,29 +470,10 @@
             <h2 class="modal-title">SPAWN NEW SLEEVE</h2>
             <form id="spawn-form" onsubmit="spawnSleeve(event)">
                 <div class="form-group">
-                    <label class="form-label">Workspace</label>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="ws-mode" value="existing" checked onchange="toggleWorkspaceMode()">
-                            Use existing
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="ws-mode" value="new" onchange="toggleWorkspaceMode()">
-                            Create new
-                        </label>
-                    </div>
-                </div>
-                <div class="form-group" id="existing-ws-group">
                     <label class="form-label">Select Workspace</label>
                     <select class="form-select" id="existing-workspace-select" required>
                         <option value="">Loading...</option>
                     </select>
-                </div>
-                <div class="form-group hidden" id="new-ws-group">
-                    <label class="form-label">Workspace Name</label>
-                    <input type="text" class="form-input" id="new-workspace-input"
-                           placeholder="my-project" pattern="[a-zA-Z0-9_\-]+"
-                           title="Letters, numbers, dashes, underscores only">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Sleeve Name (optional)</label>
@@ -554,6 +536,26 @@
                 <div class="form-actions">
                     <button type="button" class="btn" onclick="hideCloneModal()">Cancel</button>
                     <button type="submit" class="btn btn-primary" id="clone-submit-btn">Clone</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- CREATE WORKSPACE MODAL -->
+    <div id="create-workspace-modal" class="modal">
+        <div class="modal-content">
+            <h2 class="modal-title">CREATE WORKSPACE</h2>
+            <form id="create-workspace-form" onsubmit="createWorkspace(event)">
+                <div class="form-group">
+                    <label class="form-label">Workspace Name</label>
+                    <input type="text" class="form-input" id="create-workspace-name"
+                           placeholder="my-project" pattern="[a-zA-Z0-9_\-]+"
+                           title="Letters, numbers, dashes, underscores only" required>
+                </div>
+                <div id="create-workspace-error" class="error-text hidden"></div>
+                <div class="form-actions">
+                    <button type="button" class="btn" onclick="hideCreateWorkspaceModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="create-workspace-btn">Create</button>
                 </div>
             </form>
         </div>

@@ -1000,27 +1000,6 @@ function updateWorkspaceSelect() {
     ).join('');
 }
 
-function toggleWorkspaceMode() {
-    const mode = document.querySelector('input[name="ws-mode"]:checked').value;
-    const newGroup = document.getElementById('new-ws-group');
-    const existingGroup = document.getElementById('existing-ws-group');
-    const newInput = document.getElementById('new-workspace-input');
-    const existingSelect = document.getElementById('existing-workspace-select');
-
-    newGroup.classList.add('hidden');
-    existingGroup.classList.add('hidden');
-    newInput.required = false;
-    existingSelect.required = false;
-
-    if (mode === 'new') {
-        newGroup.classList.remove('hidden');
-        newInput.required = true;
-    } else if (mode === 'existing') {
-        existingGroup.classList.remove('hidden');
-        existingSelect.required = true;
-    }
-}
-
 let hostLimitsCache = null;
 
 async function loadHostLimits() {
@@ -1063,7 +1042,6 @@ function toggleAdvancedOptions() {
 
 async function showSpawnModal() {
     await refreshWorkspaces();
-    toggleWorkspaceMode();
     document.getElementById('advanced-toggle').checked = false;
     document.getElementById('advanced-options').classList.add('hidden');
     document.getElementById('spawn-modal').classList.add('active');
@@ -1073,7 +1051,6 @@ function hideSpawnModal() {
     document.getElementById('spawn-modal').classList.remove('active');
     document.getElementById('spawn-form').reset();
     hideSpawnLoading();
-    toggleWorkspaceMode();
 }
 
 function showSpawnLoading(msg) {
@@ -1107,6 +1084,62 @@ function showCloneLoading(msg) {
 function hideCloneLoading() {
     document.getElementById('clone-loading').classList.remove('active');
     document.getElementById('clone-submit-btn').disabled = false;
+}
+
+function showCreateWorkspaceModal() {
+    document.getElementById('create-workspace-modal').classList.add('active');
+    document.getElementById('create-workspace-error').classList.add('hidden');
+    document.getElementById('create-workspace-name').value = '';
+}
+
+function hideCreateWorkspaceModal() {
+    document.getElementById('create-workspace-modal').classList.remove('active');
+    document.getElementById('create-workspace-form').reset();
+    document.getElementById('create-workspace-error').classList.add('hidden');
+}
+
+async function createWorkspace(e) {
+    e.preventDefault();
+    const nameInput = document.getElementById('create-workspace-name');
+    const name = nameInput.value.trim();
+
+    if (!name) {
+        document.getElementById('create-workspace-error').textContent = 'Please enter a workspace name';
+        document.getElementById('create-workspace-error').classList.remove('hidden');
+        return;
+    }
+
+    const btn = document.getElementById('create-workspace-btn');
+    const originalText = btn.textContent;
+    btn.textContent = 'Creating...';
+    btn.disabled = true;
+
+    try {
+        const resp = await fetch('/api/workspaces', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name })
+        });
+
+        if (!resp.ok) {
+            const err = await resp.text();
+            document.getElementById('create-workspace-error').textContent = err;
+            document.getElementById('create-workspace-error').classList.remove('hidden');
+            btn.textContent = originalText;
+            btn.disabled = false;
+            return;
+        }
+
+        hideCreateWorkspaceModal();
+        notify.success('Workspace created', { detail: name });
+        refreshWorkspacesTable();
+        refreshWorkspaces();
+    } catch (err) {
+        document.getElementById('create-workspace-error').textContent = err.message;
+        document.getElementById('create-workspace-error').classList.remove('hidden');
+        btn.textContent = originalText;
+        btn.disabled = false;
+    }
 }
 
 function handleCloneProgress(data) {
@@ -1170,40 +1203,16 @@ function removePendingSpawn(pendingId) {
 
 async function spawnSleeve(e) {
     e.preventDefault();
-    const mode = document.querySelector('input[name="ws-mode"]:checked').value;
     const name = document.getElementById('name-input').value;
-    let workspace;
+    const workspace = document.getElementById('existing-workspace-select').value;
     let pendingId = null;
 
-    try {
-        if (mode === 'new') {
-            const wsName = document.getElementById('new-workspace-input').value;
-            if (!wsName) {
-                notify.warn('Please enter a workspace name');
-                return;
-            }
-            showSpawnLoading('Creating workspace...');
-            const createResp = await fetch('/api/workspaces', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: wsName })
-            });
-            if (!createResp.ok) {
-                hideSpawnLoading();
-                const err = await createResp.text();
-                notify.error('Failed to create workspace', { detail: err });
-                return;
-            }
-            const wsData = await createResp.json();
-            workspace = wsData.path;
-        } else if (mode === 'existing') {
-            workspace = document.getElementById('existing-workspace-select').value;
-            if (!workspace) {
-                notify.warn('Please select a workspace');
-                return;
-            }
-        }
+    if (!workspace) {
+        notify.warn('Please select a workspace');
+        return;
+    }
 
+    try {
         const body = { workspace, name: name || undefined };
 
         if (document.getElementById('advanced-toggle').checked) {
