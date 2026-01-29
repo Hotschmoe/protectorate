@@ -19,6 +19,8 @@ type Server struct {
 	agentDoctor *AgentDoctorManager
 	hostStats   *HostStatsCollector
 	auth        *AuthManager
+	sseHub      *SSEHub
+	broadcaster *SSEBroadcaster
 }
 
 func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
@@ -45,6 +47,12 @@ func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
 		return nil, fmt.Errorf("failed to recover sleeves: %w", err)
 	}
 
+	sseHub := NewSSEHub()
+	broadcaster := NewSSEBroadcaster(sseHub, sleeves, sidecar, docker, hostStats, workspaces)
+
+	// Wire up clone progress callback
+	workspaces.SetOnCloneProgress(broadcaster.BroadcastCloneProgress)
+
 	s := &Server{
 		cfg:         cfg,
 		docker:      docker,
@@ -54,6 +62,8 @@ func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
 		agentDoctor: agentDoctor,
 		hostStats:   hostStats,
 		auth:        auth,
+		sseHub:      sseHub,
+		broadcaster: broadcaster,
 	}
 
 	mux := http.NewServeMux()
@@ -71,6 +81,7 @@ func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
 
 func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/api/events", s.handleSSE)
 	mux.HandleFunc("/api/config", s.handleConfig)
 	mux.HandleFunc("/api/config/", s.handleConfigKey)
 	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
@@ -99,6 +110,10 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 }
 
 func (s *Server) Start() error {
+	// Start SSE hub and broadcaster
+	go s.sseHub.Run()
+	go s.broadcaster.Start(context.Background())
+
 	return s.http.ListenAndServe()
 }
 

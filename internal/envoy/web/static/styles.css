@@ -298,6 +298,15 @@ body {
     50% { opacity: 1; }
 }
 
+.sleeve-card.removing {
+    animation: fadeOutRemove 0.2s ease-out forwards;
+}
+
+@keyframes fadeOutRemove {
+    0% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(0.95); }
+}
+
 .spawning-indicator {
     display: flex;
     align-items: center;

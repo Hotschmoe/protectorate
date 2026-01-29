@@ -19,10 +19,11 @@ import (
 )
 
 type WorkspaceManager struct {
-	mu           sync.RWMutex
-	cfg          *config.EnvoyConfig
-	jobs         map[string]*protocol.CloneJob
-	sleeveGetter func() []*protocol.SleeveInfo
+	mu             sync.RWMutex
+	cfg            *config.EnvoyConfig
+	jobs           map[string]*protocol.CloneJob
+	sleeveGetter   func() []*protocol.SleeveInfo
+	onCloneProgress func(jobID, status string, progress int, errMsg string)
 }
 
 func NewWorkspaceManager(cfg *config.EnvoyConfig, sleeveGetter func() []*protocol.SleeveInfo) *WorkspaceManager {
@@ -178,8 +179,6 @@ func (wm *WorkspaceManager) runClone(job *protocol.CloneJob) {
 	err := cloneRepo(job.RepoURL, job.Workspace)
 
 	wm.mu.Lock()
-	defer wm.mu.Unlock()
-
 	job.EndTime = time.Now()
 	if err != nil {
 		job.Status = "failed"
@@ -188,6 +187,23 @@ func (wm *WorkspaceManager) runClone(job *protocol.CloneJob) {
 	} else {
 		job.Status = "completed"
 	}
+	status := job.Status
+	errMsg := job.Error
+	wm.mu.Unlock()
+
+	// Broadcast progress via SSE
+	if wm.onCloneProgress != nil {
+		progress := 100
+		if status == "failed" {
+			progress = 0
+		}
+		wm.onCloneProgress(job.ID, status, progress, errMsg)
+	}
+}
+
+// SetOnCloneProgress sets the callback for clone progress updates
+func (wm *WorkspaceManager) SetOnCloneProgress(fn func(jobID, status string, progress int, errMsg string)) {
+	wm.onCloneProgress = fn
 }
 
 func (wm *WorkspaceManager) cleanupExpiredJobs() {

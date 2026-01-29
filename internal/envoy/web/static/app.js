@@ -1,6 +1,5 @@
 let currentConnection = null;
 let currentCloneJobId = null;
-let clonePollingInterval = null;
 let lastFetchAllTime = 0;
 const FETCH_ALL_THROTTLE_MS = 60000;
 
@@ -437,6 +436,7 @@ class TerminalConnection {
 let sleevesCache = [];
 let hostStatsCache = null;
 let pendingSpawns = [];
+let sseConnected = false;
 
 async function refreshHostStats() {
     try {
@@ -563,115 +563,33 @@ function renderSpawningCard(pending) {
 }
 
 async function refreshSleeves() {
+    // Sleeves are now updated via SSE, this function only updates local cache
     try {
         const resp = await fetch('/api/sleeves');
         const sleeves = await resp.json();
         sleevesCache = sleeves;
-        const grid = document.getElementById('sleeves-grid');
-        const statActive = document.getElementById('stat-active');
-
-        statActive.textContent = sleeves.length;
-
-        const hasPending = pendingSpawns.length > 0;
-        const hasActive = sleeves.length > 0;
-
-        if (!hasActive && !hasPending) {
-            grid.innerHTML = '<div class="empty-state">No sleeves running. Click "+ SPAWN SLEEVE" to create one.</div>';
-            return;
-        }
-
-        const pendingCards = pendingSpawns.map(p => renderSpawningCard(p)).join('');
-        const sortedSleeves = [...sleeves].sort((a, b) => {
-            const wsA = getWorkspaceName(a.workspace).toLowerCase();
-            const wsB = getWorkspaceName(b.workspace).toLowerCase();
-            return wsA.localeCompare(wsB);
-        });
-        const activeCards = sortedSleeves.map(s => {
-            const wsName = getWorkspaceName(s.workspace);
-            const uptime = formatDuration(Date.now() - new Date(s.spawn_time).getTime());
-            const integrity = s.integrity !== undefined ? s.integrity.toFixed(1) : 100;
-
-            const constraintLabel = s.constrained ? 'CONSTRAINED' : 'UNCONSTRAINED';
-            const constraintClass = s.constrained ? 'constrained' : 'unconstrained';
-            const { memDisplay, memPct, cpuDisplay, cpuPct } = formatSleeveResources(s);
-            const healthClass = getHealthClass(integrity);
-
-            const dhfName = s.dhf || 'Claude Code';
-            const dhfVersion = s.dhf_version ? ` v${s.dhf_version}` : '';
-            const sidecarHealthy = s.sidecar_healthy !== false;
-            const dhfSuffix = sidecarHealthy ? '' : ' (cached)';
-            const dhfDisplay = dhfName + dhfVersion + dhfSuffix;
-            const sidecarClass = sidecarHealthy ? 'healthy' : 'unhealthy';
-
-            return `
-            <div class="sleeve-card ${healthClass}">
-                <div class="sleeve-header">
-                    <span class="sleeve-name">SLEEVE: ${escapeHtml(s.name)}</span>
-                    <span class="sidecar-status ${sidecarClass}" title="Sidecar ${sidecarHealthy ? 'connected' : 'unreachable'}"></span>
-                    <span class="sleeve-status active">ACTIVE</span>
-                </div>
-                <div class="sleeve-body">
-                    <div class="sleeve-row">
-                        <span class="sleeve-label">DHF</span>
-                        <span class="sleeve-value">${escapeHtml(dhfDisplay)}</span>
-                    </div>
-                    <div class="sleeve-row">
-                        <span class="sleeve-label">Workspace</span>
-                        <span class="sleeve-value">${escapeHtml(wsName)}</span>
-                    </div>
-                    <div class="sleeve-row">
-                        <span class="sleeve-label">Uptime</span>
-                        <span class="sleeve-value">${uptime}</span>
-                    </div>
-                    <div class="sleeve-row">
-                        <span class="sleeve-label">Resources</span>
-                        <span class="sleeve-value ${constraintClass}">${constraintLabel}</span>
-                    </div>
-
-                    <div class="integrity-bar">
-                        <div class="integrity-label">
-                            <span class="sleeve-label">Stack Integrity</span>
-                            <span class="sleeve-value">${integrity}%</span>
-                        </div>
-                        <div class="integrity-track">
-                            <div class="integrity-fill" style="width: ${integrity}%"></div>
-                        </div>
-                    </div>
-
-                    <div class="resource-row">
-                        <div class="resource">
-                            <div class="resource-header">
-                                <span class="resource-label">MEMORY</span>
-                                <span class="resource-value">${memDisplay}</span>
-                            </div>
-                            <div class="resource-bar">
-                                <div class="resource-fill" style="width: ${memPct}%"></div>
-                            </div>
-                        </div>
-                        <div class="resource">
-                            <div class="resource-header">
-                                <span class="resource-label">CPU</span>
-                                <span class="resource-value">${cpuDisplay}</span>
-                            </div>
-                            <div class="resource-bar">
-                                <div class="resource-fill" style="width: ${cpuPct}%"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="sleeve-actions">
-                    <button class="btn" onclick="openTerminal('${escapeHtml(s.name)}')">TERMINAL</button>
-                    <button class="btn" onclick="openTerminalObserve('${escapeHtml(s.name)}')">OBSERVE</button>
-                    <button class="btn btn-danger" onclick="killSleeve('${escapeHtml(s.name)}')">KILL</button>
-                </div>
-            </div>
-        `}).join('');
-
-        grid.innerHTML = pendingCards + activeCards;
-
         updateNeedlecastSleeveList();
     } catch (e) {
         console.error('Failed to fetch sleeves:', e);
+    }
+}
+
+function updateSleeveCount() {
+    const grid = document.getElementById('sleeves-grid');
+    const cards = grid.querySelectorAll('.sleeve-card:not(.spawning)');
+    const statActive = document.getElementById('stat-active');
+    statActive.textContent = cards.length;
+}
+
+function renderPendingSpawns() {
+    const grid = document.getElementById('sleeves-grid');
+    // Remove existing spawning cards
+    grid.querySelectorAll('.sleeve-card.spawning').forEach(el => el.remove());
+
+    // Add pending spawn cards at the beginning
+    if (pendingSpawns.length > 0) {
+        const pendingHtml = pendingSpawns.map(p => renderSpawningCard(p)).join('');
+        grid.insertAdjacentHTML('afterbegin', pendingHtml);
     }
 }
 
@@ -1283,7 +1201,7 @@ function hideCloneModal() {
     document.getElementById('clone-form').reset();
     document.getElementById('clone-error').classList.add('hidden');
     hideCloneLoading();
-    stopClonePolling();
+    currentCloneJobId = null;
 }
 
 function showCloneLoading(msg) {
@@ -1297,12 +1215,19 @@ function hideCloneLoading() {
     document.getElementById('clone-submit-btn').disabled = false;
 }
 
-function stopClonePolling() {
-    if (clonePollingInterval) {
-        clearInterval(clonePollingInterval);
-        clonePollingInterval = null;
+function handleCloneProgress(data) {
+    if (data.id !== currentCloneJobId) return;
+
+    if (data.status === 'completed') {
+        hideCloneLoading();
+        hideCloneModal();
+        refreshWorkspacesTable();
+        refreshWorkspaces();
+    } else if (data.status === 'failed') {
+        hideCloneLoading();
+        document.getElementById('clone-error').textContent = data.error || 'Clone failed';
+        document.getElementById('clone-error').classList.remove('hidden');
     }
-    currentCloneJobId = null;
 }
 
 async function cloneWorkspace(e) {
@@ -1336,28 +1261,7 @@ async function cloneWorkspace(e) {
         const job = await resp.json();
         currentCloneJobId = job.id;
         showCloneLoading('Cloning repository...');
-
-        clonePollingInterval = setInterval(async () => {
-            try {
-                const statusResp = await fetch(`/api/workspaces/clone?id=${currentCloneJobId}`);
-                const jobStatus = await statusResp.json();
-
-                if (jobStatus.status === 'completed') {
-                    stopClonePolling();
-                    hideCloneLoading();
-                    hideCloneModal();
-                    refreshWorkspacesTable();
-                    refreshWorkspaces();
-                } else if (jobStatus.status === 'failed') {
-                    stopClonePolling();
-                    hideCloneLoading();
-                    document.getElementById('clone-error').textContent = jobStatus.error || 'Clone failed';
-                    document.getElementById('clone-error').classList.remove('hidden');
-                }
-            } catch (pollErr) {
-                console.error('Failed to poll clone status:', pollErr);
-            }
-        }, 1000);
+        // Clone progress will be received via SSE clone:progress events
 
     } catch (e) {
         hideCloneLoading();
@@ -1425,7 +1329,7 @@ async function spawnSleeve(e) {
 
         hideSpawnLoading();
         hideSpawnModal();
-        refreshSleeves();
+        renderPendingSpawns();
 
         const resp = await fetch('/api/sleeves', {
             method: 'POST',
@@ -1434,23 +1338,24 @@ async function spawnSleeve(e) {
         });
 
         removePendingSpawn(pendingId);
+        renderPendingSpawns();
 
         if (!resp.ok) {
             const err = await resp.text();
-            refreshSleeves();
             notify.error('Failed to spawn sleeve', { detail: err });
             return;
         }
 
-        refreshSleeves();
+        // Sleeve will appear via SSE when container is ready
+        refreshSleeves(); // Update cache for needlecast
     } catch (err) {
         if (pendingId) {
             removePendingSpawn(pendingId);
+            renderPendingSpawns();
         }
         hideSpawnLoading();
         console.error('Failed to spawn sleeve:', err);
         notify.error('Failed to spawn sleeve', { detail: err.message });
-        refreshSleeves();
     }
 }
 
@@ -1466,7 +1371,8 @@ async function killSleeve(name) {
             notify.error('Failed to kill sleeve', { detail: err });
             return;
         }
-        refreshSleeves();
+        // Sleeve removal will be handled via SSE sleeve:remove event
+        refreshSleeves(); // Update cache for needlecast
     } catch (e) {
         console.error('Failed to kill sleeve:', e);
         notify.error('Failed to kill sleeve', { detail: e.message });
@@ -1555,18 +1461,98 @@ async function checkAuthStatus() {
     }
 }
 
+// Process OOB HTML fragment from SSE
+function processOOBSwap(html) {
+    // Create a temporary container to parse the HTML
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+
+    // Process each element with hx-swap-oob
+    const oobElements = temp.querySelectorAll('[hx-swap-oob]');
+    oobElements.forEach(el => {
+        const swapSpec = el.getAttribute('hx-swap-oob');
+        const match = swapSpec.match(/^(outerHTML|innerHTML):#(.+)$/);
+        if (match) {
+            const swapType = match[1];
+            const targetId = match[2];
+            const target = document.getElementById(targetId);
+            if (target) {
+                el.removeAttribute('hx-swap-oob');
+                if (swapType === 'outerHTML') {
+                    target.outerHTML = el.outerHTML;
+                } else {
+                    target.innerHTML = el.innerHTML;
+                }
+            }
+        }
+    });
+}
+
+// SSE Event Handlers
+document.body.addEventListener('htmx:sseMessage', (e) => {
+    const eventName = e.detail.type;
+
+    if (eventName === 'init') {
+        sseConnected = true;
+        updateSleeveCount();
+        renderPendingSpawns();
+        refreshSleeves(); // Update cache
+    } else if (eventName === 'sleeve:add') {
+        // Append new sleeve card to grid
+        const grid = document.getElementById('sleeves-grid');
+        if (grid) {
+            // Remove empty state if present
+            const emptyState = grid.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+            // Append the new card HTML
+            grid.insertAdjacentHTML('beforeend', e.detail.data);
+            updateSleeveCount();
+        }
+        refreshSleeves(); // Update cache
+    } else if (eventName === 'sleeve:update') {
+        // Process OOB swap for sleeve card
+        processOOBSwap(e.detail.data);
+    } else if (eventName === 'sleeve:remove') {
+        const data = JSON.parse(e.detail.data);
+        const el = document.getElementById(`sleeve-${data.name}`);
+        if (el) {
+            el.classList.add('removing');
+            setTimeout(() => {
+                el.remove();
+                updateSleeveCount();
+                // Show empty state if no sleeves left
+                const grid = document.getElementById('sleeves-grid');
+                if (grid && grid.querySelectorAll('.sleeve-card').length === 0) {
+                    grid.innerHTML = '<div class="empty-state">No sleeves running. Click "+ SPAWN SLEEVE" to create one.</div>';
+                }
+            }, 200);
+        }
+        refreshSleeves(); // Update cache
+    } else if (eventName === 'host:stats') {
+        // Process OOB swaps for host stats fragments
+        processOOBSwap(e.detail.data);
+    } else if (eventName === 'clone:progress') {
+        const data = JSON.parse(e.detail.data);
+        handleCloneProgress(data);
+    }
+});
+
+// Handle SSE connection status
+document.body.addEventListener('htmx:sseOpen', () => {
+    sseConnected = true;
+    console.log('SSE connected');
+});
+
+document.body.addEventListener('htmx:sseError', () => {
+    sseConnected = false;
+    console.log('SSE disconnected, will reconnect...');
+});
+
 // Initialize on page load
 refreshSleeves();
-refreshHostStats();
 checkAuthStatus();
-
-setInterval(() => {
-    refreshSleeves();
-}, 5000);
-
-setInterval(() => {
-    refreshHostStats();
-}, 30000);
 
 // Check auth status every 5 minutes
 setInterval(() => {

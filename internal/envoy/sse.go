@@ -1,0 +1,152 @@
+package envoy
+
+import (
+	"fmt"
+	"net/http"
+	"sync"
+	"time"
+)
+
+// SSEHub manages SSE client connections and broadcasts messages
+type SSEHub struct {
+	clients    map[*SSEClient]bool
+	broadcast  chan *SSEMessage
+	register   chan *SSEClient
+	unregister chan *SSEClient
+	mu         sync.RWMutex
+}
+
+// SSEClient represents a connected SSE client
+type SSEClient struct {
+	send chan *SSEMessage
+	done chan struct{}
+}
+
+// SSEMessage represents a server-sent event
+type SSEMessage struct {
+	Event string
+	Data  string
+}
+
+// NewSSEHub creates a new SSE hub
+func NewSSEHub() *SSEHub {
+	return &SSEHub{
+		clients:    make(map[*SSEClient]bool),
+		broadcast:  make(chan *SSEMessage, 256),
+		register:   make(chan *SSEClient),
+		unregister: make(chan *SSEClient),
+	}
+}
+
+// Run starts the SSE hub event loop
+func (h *SSEHub) Run() {
+	keepaliveTicker := time.NewTicker(15 * time.Second)
+	defer keepaliveTicker.Stop()
+
+	for {
+		select {
+		case client := <-h.register:
+			h.mu.Lock()
+			h.clients[client] = true
+			h.mu.Unlock()
+
+		case client := <-h.unregister:
+			h.mu.Lock()
+			if _, ok := h.clients[client]; ok {
+				delete(h.clients, client)
+				close(client.send)
+			}
+			h.mu.Unlock()
+
+		case msg := <-h.broadcast:
+			h.mu.RLock()
+			for client := range h.clients {
+				select {
+				case client.send <- msg:
+				default:
+					// Client buffer full, skip this message
+				}
+			}
+			h.mu.RUnlock()
+
+		case <-keepaliveTicker.C:
+			// Send keepalive comment to all clients
+			h.mu.RLock()
+			for client := range h.clients {
+				select {
+				case client.send <- &SSEMessage{Event: "keepalive", Data: ""}:
+				default:
+				}
+			}
+			h.mu.RUnlock()
+		}
+	}
+}
+
+// Broadcast sends a message to all connected clients
+func (h *SSEHub) Broadcast(event, data string) {
+	h.broadcast <- &SSEMessage{Event: event, Data: data}
+}
+
+// ClientCount returns the number of connected clients
+func (h *SSEHub) ClientCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.clients)
+}
+
+// handleSSE handles SSE connections from clients
+func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	// Check for SSE support
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "SSE not supported", http.StatusInternalServerError)
+		return
+	}
+
+	// Create client
+	client := &SSEClient{
+		send: make(chan *SSEMessage, 64),
+		done: make(chan struct{}),
+	}
+
+	// Register client
+	s.sseHub.register <- client
+
+	// Cleanup on disconnect
+	defer func() {
+		s.sseHub.unregister <- client
+	}()
+
+	// Request initial state from broadcaster
+	s.broadcaster.RequestInit()
+
+	// Send events to client
+	for {
+		select {
+		case msg, ok := <-client.send:
+			if !ok {
+				return
+			}
+
+			if msg.Event == "keepalive" {
+				// SSE comment format for keepalive
+				fmt.Fprintf(w, ": keepalive\n\n")
+			} else {
+				fmt.Fprintf(w, "event: %s\n", msg.Event)
+				fmt.Fprintf(w, "data: %s\n\n", msg.Data)
+			}
+			flusher.Flush()
+
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
