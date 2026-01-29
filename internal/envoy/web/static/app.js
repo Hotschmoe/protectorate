@@ -70,10 +70,6 @@ const notify = (function() {
             setTimeout(() => dismiss(id), autoDismissTime);
         }
 
-        if (options.key) {
-            dismissed.delete(options.key);
-        }
-
         return id;
     }
 
