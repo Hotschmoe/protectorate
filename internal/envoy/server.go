@@ -21,6 +21,7 @@ type Server struct {
 	auth        *AuthManager
 	sseHub      *SSEHub
 	broadcaster *SSEBroadcaster
+	shutdownCh  chan struct{} // Channel to signal shutdown for restart
 }
 
 func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
@@ -64,13 +65,14 @@ func NewServer(cfg *config.EnvoyConfig) (*Server, error) {
 		auth:        auth,
 		sseHub:      sseHub,
 		broadcaster: broadcaster,
+		shutdownCh:  make(chan struct{}),
 	}
 
 	mux := http.NewServeMux()
 	s.registerRoutes(mux)
 
 	s.http = &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.Port),
+		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
 		Handler:      mux,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -105,8 +107,14 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/agent-doctor/sync", s.handleAgentDoctorSync)
 	mux.HandleFunc("/api/agent-doctor/init", s.handleAgentDoctorInit)
 	mux.HandleFunc("/api/agent-doctor/diff", s.handleAgentDoctorDiff)
+	mux.HandleFunc("/api/restart", s.handleRestart)
 	mux.HandleFunc("/static/", s.handleStatic)
 	mux.HandleFunc("/", s.handleIndex)
+}
+
+// ShutdownCh returns the shutdown channel for external signal handling.
+func (s *Server) ShutdownCh() <-chan struct{} {
+	return s.shutdownCh
 }
 
 func (s *Server) Start() error {

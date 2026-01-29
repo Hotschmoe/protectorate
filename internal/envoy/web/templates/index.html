@@ -400,7 +400,10 @@
             </div>
 
             <div class="config-footer">
-                <span class="config-hint">Changes require envoy restart to take effect. Config stored at /home/agent/.config/envoy.yaml</span>
+                <div class="config-footer-row">
+                    <span class="config-hint">Changes require envoy restart to take effect. Config stored at /home/agent/.config/envoy.yaml</span>
+                    <button class="btn btn-danger" onclick="restartEnvoy()">Restart Envoy</button>
+                </div>
             </div>
         </main>
     </div>

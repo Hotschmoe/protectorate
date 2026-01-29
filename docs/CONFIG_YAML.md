@@ -43,7 +43,7 @@ server:
 sleeves:
   max: 10                    # Maximum concurrent sleeve containers (1-100)
   poll_interval: 1h          # How often to check sleeve health
-  idle_threshold: "0"        # Auto-kill after idle (0 = never)
+  idle_threshold: "0s"       # Auto-kill after idle (0s = never)
   image: ghcr.io/hotschmoe/protectorate-sleeve:latest
 
 docker:
@@ -196,6 +196,19 @@ DELETE /api/config/sleeves.max
 Response:
 ```json
 { "key": "sleeves.max", "value": 10, "message": "reset to default - restart envoy to apply changes" }
+```
+
+### Restart Envoy
+
+Trigger a graceful restart of the Envoy service (relies on Docker restart policy):
+
+```http
+POST /api/restart
+```
+
+Response:
+```json
+{ "status": "restarting", "message": "Envoy will restart shortly. Docker will bring it back up." }
 ```
 
 ---

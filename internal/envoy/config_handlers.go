@@ -3,16 +3,19 @@ package envoy
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hotschmoe/protectorate/internal/config"
 )
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		config := map[string]interface{}{
+		resp := map[string]interface{}{
 			"server": map[string]interface{}{
 				"port": s.cfg.Server.Port,
 			},
@@ -36,7 +39,9 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(config)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			log.Printf("Error encoding config response: %v", err)
+		}
 
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -56,7 +61,9 @@ func (s *Server) handleConfigKey(w http.ResponseWriter, r *http.Request) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"key": key, "value": value})
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{"key": key, "value": value}); err != nil {
+			log.Printf("Error encoding config key response: %v", err)
+		}
 
 	case http.MethodPut:
 		var req struct {
@@ -74,11 +81,13 @@ func (s *Server) handleConfigKey(w http.ResponseWriter, r *http.Request) {
 
 		value, _ := s.getConfigValue(key)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"key":     key,
 			"value":   value,
 			"message": "saved - restart envoy to apply changes",
-		})
+		}); err != nil {
+			log.Printf("Error encoding config set response: %v", err)
+		}
 
 	case http.MethodDelete:
 		if err := s.resetConfigValue(key); err != nil {
@@ -88,11 +97,13 @@ func (s *Server) handleConfigKey(w http.ResponseWriter, r *http.Request) {
 
 		value, _ := s.getConfigValue(key)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"key":     key,
 			"value":   value,
 			"message": "reset to default - restart envoy to apply changes",
-		})
+		}); err != nil {
+			log.Printf("Error encoding config reset response: %v", err)
+		}
 
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -144,13 +155,13 @@ func (s *Server) setConfigValue(key, value string) error {
 
 	case "sleeves.poll_interval":
 		if _, err := time.ParseDuration(value); err != nil {
-			return errors.New("sleeves.poll_interval must be a valid duration (e.g., 1h, 30m)")
+			return errors.New("sleeves.poll_interval must be a valid duration (e.g., 1h, 30m, 5s)")
 		}
 		s.cfg.Sleeves.PollInterval = value
 
 	case "sleeves.idle_threshold":
 		if _, err := time.ParseDuration(value); err != nil {
-			return errors.New("sleeves.idle_threshold must be a valid duration (e.g., 1h, 0)")
+			return errors.New("sleeves.idle_threshold must be a valid duration (e.g., 1h, 30m, 0s for disabled)")
 		}
 		s.cfg.Sleeves.IdleThreshold = value
 
@@ -191,19 +202,19 @@ func (s *Server) setConfigValue(key, value string) error {
 func (s *Server) resetConfigValue(key string) error {
 	switch key {
 	case "server.port":
-		s.cfg.Server.Port = 7470
+		s.cfg.Server.Port = config.Defaults.ServerPort
 	case "sleeves.max":
-		s.cfg.Sleeves.Max = 10
+		s.cfg.Sleeves.Max = config.Defaults.SleevesMax
 	case "sleeves.poll_interval":
-		s.cfg.Sleeves.PollInterval = "1h"
+		s.cfg.Sleeves.PollInterval = config.Defaults.SleevesPollInt
 	case "sleeves.idle_threshold":
-		s.cfg.Sleeves.IdleThreshold = "0"
+		s.cfg.Sleeves.IdleThreshold = config.Defaults.SleevesIdleThresh
 	case "sleeves.image":
-		s.cfg.Sleeves.Image = "ghcr.io/hotschmoe/protectorate-sleeve:latest"
+		s.cfg.Sleeves.Image = config.Defaults.SleevesImage
 	case "docker.network":
-		s.cfg.Docker.Network = "raven"
+		s.cfg.Docker.Network = config.Defaults.DockerNetwork
 	case "git.clone_protocol":
-		s.cfg.Git.CloneProtocol = "ssh"
+		s.cfg.Git.CloneProtocol = config.Defaults.GitCloneProtocol
 	case "git.committer.name":
 		s.cfg.Git.Committer.Name = ""
 	case "git.committer.email":

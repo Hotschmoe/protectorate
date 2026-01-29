@@ -150,7 +150,7 @@ func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.Sleeve
 	}
 
 	cfg := &container.Config{
-		Image:  m.cfg.Docker.SleeveImage,
+		Image:  m.cfg.Sleeves.Image,
 		Labels: labels,
 	}
 
@@ -190,7 +190,7 @@ func (m *SleeveManager) Spawn(req protocol.SpawnSleeveRequest) (*protocol.Sleeve
 		},
 	}
 
-	containerID, err := m.docker.CreateContainer(containerName, m.cfg.Docker.SleeveImage, cfg, hostCfg, netCfg)
+	containerID, err := m.docker.CreateContainer(containerName, m.cfg.Sleeves.Image, cfg, hostCfg, netCfg)
 	if err != nil {
 		m.releaseName(name)
 		return nil, fmt.Errorf("failed to create container: %w", err)

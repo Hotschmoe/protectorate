@@ -14,6 +14,28 @@ import (
 
 const DefaultConfigPath = "/home/agent/.config/envoy.yaml"
 
+// Defaults holds all default configuration values in one place.
+// Used by both config loading and config reset operations.
+var Defaults = struct {
+	ServerPort        int
+	SleevesMax        int
+	SleevesPollInt    string
+	SleevesIdleThresh string
+	SleevesImage      string
+	DockerNetwork     string
+	DockerWorkspaceRoot string
+	GitCloneProtocol  string
+}{
+	ServerPort:        7470,
+	SleevesMax:        10,
+	SleevesPollInt:    "1h",
+	SleevesIdleThresh: "0s",
+	SleevesImage:      "ghcr.io/hotschmoe/protectorate-sleeve:latest",
+	DockerNetwork:     "raven",
+	DockerWorkspaceRoot: "/home/agent/workspaces",
+	GitCloneProtocol:  "ssh",
+}
+
 // EnvoyConfig defines the configuration for the Envoy manager service.
 type EnvoyConfig struct {
 	mu         sync.RWMutex `yaml:"-"`
@@ -25,12 +47,6 @@ type EnvoyConfig struct {
 	Git     GitConfig     `yaml:"git"`
 	Gitea   GiteaConfig   `yaml:"gitea,omitempty"`
 	Mirror  MirrorConfig  `yaml:"mirror,omitempty"`
-
-	// Legacy fields for backwards compatibility during transition
-	PollInterval  time.Duration `yaml:"-"`
-	IdleThreshold time.Duration `yaml:"-"`
-	MaxSleeves    int           `yaml:"-"`
-	Port          int           `yaml:"-"`
 }
 
 // ServerConfig defines HTTP server settings.
@@ -50,9 +66,8 @@ type SleevesConfig struct {
 type DockerConfig struct {
 	Network         string `yaml:"network"`
 	WorkspaceRoot   string `yaml:"workspace_root"`
-	SleeveImage     string `yaml:"-"` // Deprecated: use Sleeves.Image
-	WorkspaceVolume string `yaml:"-"` // Internal only
-	CredsVolume     string `yaml:"-"` // Internal only
+	WorkspaceVolume string `yaml:"-"` // Internal only, not persisted
+	CredsVolume     string `yaml:"-"` // Internal only, not persisted
 }
 
 // GitConfig defines git-related settings.
@@ -131,29 +146,28 @@ func LoadEnvoyConfig() *EnvoyConfig {
 	cfg.applyDefaults()
 	cfg.loadFromYAML()
 	cfg.applyEnvOverrides()
-	cfg.syncLegacyFields()
 	return cfg
 }
 
 // applyDefaults sets all configuration to default values.
 func (c *EnvoyConfig) applyDefaults() {
 	c.Server = ServerConfig{
-		Port: 7470,
+		Port: Defaults.ServerPort,
 	}
 	c.Sleeves = SleevesConfig{
-		Max:           10,
-		PollInterval:  "1h",
-		IdleThreshold: "0",
-		Image:         "ghcr.io/hotschmoe/protectorate-sleeve:latest",
+		Max:           Defaults.SleevesMax,
+		PollInterval:  Defaults.SleevesPollInt,
+		IdleThreshold: Defaults.SleevesIdleThresh,
+		Image:         Defaults.SleevesImage,
 	}
 	c.Docker = DockerConfig{
-		Network:         "raven",
-		WorkspaceRoot:   "/home/agent/workspaces",
+		Network:         Defaults.DockerNetwork,
+		WorkspaceRoot:   Defaults.DockerWorkspaceRoot,
 		WorkspaceVolume: "agent-workspaces",
 		CredsVolume:     "agent-creds",
 	}
 	c.Git = GitConfig{
-		CloneProtocol: "ssh",
+		CloneProtocol: Defaults.GitCloneProtocol,
 		Committer: CommitterConfig{
 			Name:  "",
 			Email: "",
@@ -213,7 +227,7 @@ func (c *EnvoyConfig) applyEnvOverrides() {
 	if val := os.Getenv("GIT_CLONE_PROTOCOL"); val != "" {
 		c.Git.CloneProtocol = val
 	}
-	// Gitea/Mirror env overrides for backwards compatibility
+	// Gitea/Mirror env overrides
 	if val := os.Getenv("GITEA_URL"); val != "" {
 		c.Gitea.URL = val
 	}
@@ -237,15 +251,6 @@ func (c *EnvoyConfig) applyEnvOverrides() {
 	if val := os.Getenv("MIRROR_GITHUB_TOKEN"); val != "" {
 		c.Mirror.Token = val
 	}
-}
-
-// syncLegacyFields populates the old flat fields for backwards compatibility.
-func (c *EnvoyConfig) syncLegacyFields() {
-	c.Port = c.Server.Port
-	c.MaxSleeves = c.Sleeves.Max
-	c.PollInterval = parseDuration(c.Sleeves.PollInterval, time.Hour)
-	c.IdleThreshold = parseDuration(c.Sleeves.IdleThreshold, 0)
-	c.Docker.SleeveImage = c.Sleeves.Image
 }
 
 // Save persists the current configuration to the YAML file.

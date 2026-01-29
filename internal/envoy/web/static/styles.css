@@ -1298,7 +1298,14 @@ td { color: var(--text-primary); }
     margin-top: 1.5rem;
     padding-top: 1rem;
     border-top: 1px solid var(--bg-elevated);
-    text-align: center;
+}
+
+.config-footer-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
 }
 
 .config-save-status {

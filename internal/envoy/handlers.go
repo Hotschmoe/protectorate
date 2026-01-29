@@ -18,6 +18,25 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
+func (s *Server) handleRestart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "restarting",
+		"message": "Envoy will restart shortly. Docker will bring it back up.",
+	})
+
+	// Trigger shutdown after sending response
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		close(s.shutdownCh)
+	}()
+}
+
 func calculateIntegrityFromCstack(stats *protocol.CstackStats) float64 {
 	if stats == nil || !stats.Exists || stats.Total == 0 {
 		return 100.0

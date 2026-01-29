@@ -1638,6 +1638,53 @@ async function revokeAuth(provider) {
     }
 }
 
+async function restartEnvoy() {
+    if (!confirm('Restart Envoy? This will briefly disconnect all sleeves and the dashboard.')) {
+        return;
+    }
+
+    try {
+        const resp = await fetch('/api/restart', { method: 'POST' });
+        const result = await resp.json();
+
+        notify.info('Restarting', { detail: result.message || 'Envoy is restarting...' });
+
+        // Wait a moment then start checking for reconnection
+        setTimeout(() => {
+            checkReconnection();
+        }, 2000);
+    } catch (err) {
+        notify.error('Restart Failed', { detail: err.message });
+    }
+}
+
+function checkReconnection() {
+    let attempts = 0;
+    const maxAttempts = 30;
+
+    const check = async () => {
+        attempts++;
+        try {
+            const resp = await fetch('/health');
+            if (resp.ok) {
+                notify.success('Reconnected', { detail: 'Envoy is back online' });
+                location.reload();
+                return;
+            }
+        } catch (e) {
+            // Still down, keep trying
+        }
+
+        if (attempts < maxAttempts) {
+            setTimeout(check, 1000);
+        } else {
+            notify.error('Connection Lost', { detail: 'Could not reconnect to Envoy. Please refresh manually.' });
+        }
+    };
+
+    check();
+}
+
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
