@@ -110,6 +110,10 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Disable write deadline for SSE (long-lived connection)
+	rc := http.NewResponseController(w)
+	rc.SetWriteDeadline(time.Time{})
+
 	// Create client
 	client := &SSEClient{
 		send: make(chan *SSEMessage, 64),

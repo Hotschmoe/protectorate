@@ -1237,7 +1237,8 @@ async function spawnSleeve(e) {
             return;
         }
 
-        // Sleeve will appear via SSE when container is ready
+        const sleeve = await resp.json();
+        notify.success('Sleeve spawned', { detail: sleeve.name });
         refreshSleeves(); // Update cache for needlecast
     } catch (err) {
         if (pendingId) {
@@ -1322,7 +1323,7 @@ async function checkAuthStatus() {
 
         if (result.expired) {
             notify.warn('Authentication expired', {
-                detail: 'Credentials need renewal',
+                detail: 'Claude credentials need renewal',
                 action: {
                     text: 'View Details',
                     onclick: () => {
@@ -1330,8 +1331,7 @@ async function checkAuthStatus() {
                         notify.markDismissed('auth-warning');
                     }
                 },
-                autoDismiss: 0,
-                key: 'auth-warning'
+                autoDismiss: 15000
             });
         } else if (result.expiring_soon) {
             notify.warn('Authentication expiring soon', {
@@ -1343,8 +1343,7 @@ async function checkAuthStatus() {
                         notify.markDismissed('auth-warning');
                     }
                 },
-                autoDismiss: 0,
-                key: 'auth-warning'
+                autoDismiss: 15000
             });
         }
     } catch (e) {
@@ -1354,11 +1353,9 @@ async function checkAuthStatus() {
 
 // Process OOB HTML fragment from SSE
 function processOOBSwap(html) {
-    // Create a temporary container to parse the HTML
     const temp = document.createElement('div');
     temp.innerHTML = html;
 
-    // Process each element with hx-swap-oob
     const oobElements = temp.querySelectorAll('[hx-swap-oob]');
     oobElements.forEach(el => {
         const swapSpec = el.getAttribute('hx-swap-oob');
@@ -1379,69 +1376,102 @@ function processOOBSwap(html) {
     });
 }
 
-// SSE Event Handlers
-document.body.addEventListener('htmx:sseMessage', (e) => {
-    const eventName = e.detail.type;
+// Native SSE connection for reliable event handling
+let sseSource = null;
+let sseReconnectAttempts = 0;
+const SSE_MAX_RECONNECT = 10;
+const SSE_RECONNECT_BASE_DELAY = 1000;
 
-    if (eventName === 'init') {
+function connectSSE() {
+    if (sseSource) {
+        sseSource.close();
+    }
+
+    sseSource = new EventSource('/api/events');
+
+    sseSource.onopen = () => {
         sseConnected = true;
-        updateSleeveCount();
-        renderPendingSpawns();
-        refreshSleeves(); // Update cache
-    } else if (eventName === 'sleeve:add') {
-        // Append new sleeve card to grid
+        sseReconnectAttempts = 0;
+        console.log('SSE connected');
+    };
+
+    sseSource.onerror = () => {
+        sseConnected = false;
+        sseSource.close();
+        sseSource = null;
+
+        if (sseReconnectAttempts < SSE_MAX_RECONNECT) {
+            const delay = Math.min(SSE_RECONNECT_BASE_DELAY * Math.pow(2, sseReconnectAttempts), 30000);
+            sseReconnectAttempts++;
+            console.log(`SSE disconnected, reconnecting in ${delay}ms...`);
+            setTimeout(connectSSE, delay);
+        } else {
+            console.error('SSE max reconnect attempts reached');
+        }
+    };
+
+    // Handle init event
+    sseSource.addEventListener('init', (e) => {
         const grid = document.getElementById('sleeves-grid');
         if (grid) {
-            // Remove empty state if present
+            grid.innerHTML = e.data;
+            updateSleeveCount();
+            renderPendingSpawns();
+        }
+        refreshSleeves();
+    });
+
+    // Handle sleeve:add event
+    sseSource.addEventListener('sleeve:add', (e) => {
+        const grid = document.getElementById('sleeves-grid');
+        if (grid) {
             const emptyState = grid.querySelector('.empty-state');
             if (emptyState) {
                 emptyState.remove();
             }
-            // Append the new card HTML
-            grid.insertAdjacentHTML('beforeend', e.detail.data);
+            grid.insertAdjacentHTML('beforeend', e.data);
             updateSleeveCount();
         }
-        refreshSleeves(); // Update cache
-    } else if (eventName === 'sleeve:update') {
-        // Process OOB swap for sleeve card
-        processOOBSwap(e.detail.data);
-    } else if (eventName === 'sleeve:remove') {
-        const data = JSON.parse(e.detail.data);
+        refreshSleeves();
+    });
+
+    // Handle sleeve:update event
+    sseSource.addEventListener('sleeve:update', (e) => {
+        processOOBSwap(e.data);
+    });
+
+    // Handle sleeve:remove event
+    sseSource.addEventListener('sleeve:remove', (e) => {
+        const data = JSON.parse(e.data);
         const el = document.getElementById(`sleeve-${data.name}`);
         if (el) {
             el.classList.add('removing');
             setTimeout(() => {
                 el.remove();
                 updateSleeveCount();
-                // Show empty state if no sleeves left
                 const grid = document.getElementById('sleeves-grid');
                 if (grid && grid.querySelectorAll('.sleeve-card').length === 0) {
                     grid.innerHTML = '<div class="empty-state">No sleeves running. Click "+ SPAWN SLEEVE" to create one.</div>';
                 }
             }, 200);
         }
-        refreshSleeves(); // Update cache
-    } else if (eventName === 'host:stats') {
-        // Process OOB swaps for host stats fragments
-        processOOBSwap(e.detail.data);
-    } else if (eventName === 'clone:progress') {
-        const data = JSON.parse(e.detail.data);
+        refreshSleeves();
+    });
+
+    // Handle host:stats event
+    sseSource.addEventListener('host:stats', (e) => {
+        processOOBSwap(e.data);
+    });
+
+    // Handle clone:progress event
+    sseSource.addEventListener('clone:progress', (e) => {
+        const data = JSON.parse(e.data);
         handleCloneProgress(data);
-    }
-});
-
-// Handle SSE connection status
-document.body.addEventListener('htmx:sseOpen', () => {
-    sseConnected = true;
-    console.log('SSE connected');
-});
-
-document.body.addEventListener('htmx:sseError', () => {
-    sseConnected = false;
-    console.log('SSE disconnected, will reconnect...');
-});
+    });
+}
 
 // Initialize on page load
+connectSSE();
 refreshSleeves();
 checkAuthStatus();
 

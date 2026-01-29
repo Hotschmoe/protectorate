@@ -126,10 +126,12 @@ func (m *AuthManager) Check() *protocol.AuthCheckResult {
 
 	for provider, providerStatus := range status.Providers {
 		info := m.checkProvider(provider, providerStatus, now)
-		if info.Status == "missing" || info.Status == "expired" {
+		// Only Claude is required - other providers are optional
+		isRequired := provider == protocol.AuthProviderClaude
+		if isRequired && (info.Status == "missing" || info.Status == "expired") {
 			result.Valid = false
 			result.Expired = true
-		} else if info.Status == "expiring_soon" {
+		} else if isRequired && info.Status == "expiring_soon" {
 			result.ExpiringSoon = true
 		}
 		result.Providers[provider] = info
