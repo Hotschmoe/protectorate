@@ -11,7 +11,6 @@ import (
 	"github.com/hotschmoe/protectorate/internal/protocol"
 )
 
-
 // SSEBroadcaster polls for changes and broadcasts updates to SSE clients
 type SSEBroadcaster struct {
 	hub        *SSEHub
