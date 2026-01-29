@@ -2,7 +2,9 @@ package envoy
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -143,7 +145,8 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 				fmt.Fprintf(w, ": keepalive\n\n")
 			} else {
 				fmt.Fprintf(w, "event: %s\n", msg.Event)
-				fmt.Fprintf(w, "data: %s\n\n", msg.Data)
+				// SSE requires each line of data to be prefixed with "data: "
+				writeSSEData(w, msg.Data)
 			}
 			flusher.Flush()
 
@@ -151,4 +154,13 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+// writeSSEData writes data in proper SSE format, handling multi-line content
+func writeSSEData(w io.Writer, data string) {
+	lines := strings.Split(data, "\n")
+	for _, line := range lines {
+		fmt.Fprintf(w, "data: %s\n", line)
+	}
+	fmt.Fprintf(w, "\n")
 }

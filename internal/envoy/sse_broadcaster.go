@@ -43,7 +43,7 @@ func NewSSEBroadcaster(hub *SSEHub, sleeves *SleeveManager, sidecar *SidecarClie
 // Start begins the background polling loop
 func (b *SSEBroadcaster) Start(ctx context.Context) {
 	sleeveTicker := time.NewTicker(3 * time.Second)
-	hostTicker := time.NewTicker(30 * time.Second)
+	hostTicker := time.NewTicker(5 * time.Second)
 	defer sleeveTicker.Stop()
 	defer hostTicker.Stop()
 
@@ -56,7 +56,7 @@ func (b *SSEBroadcaster) Start(ctx context.Context) {
 			// Client connected and needs initial state
 			if b.hub.ClientCount() > 0 {
 				b.broadcastFullGrid()
-				b.broadcastHostStats(ctx)
+				b.broadcastHostStatsForce(ctx)
 			}
 
 		case <-sleeveTicker.C:
@@ -146,7 +146,7 @@ func (b *SSEBroadcaster) checkSleeveChanges(ctx context.Context) {
 	b.prevSnapshots = currentHashes
 }
 
-// broadcastHostStats sends updated host stats to all clients
+// broadcastHostStats sends updated host stats to all clients (with change detection)
 func (b *SSEBroadcaster) broadcastHostStats(ctx context.Context) {
 	stats := b.hostStats.GetStats(ctx)
 	html := RenderHostStats(stats)
@@ -163,6 +163,18 @@ func (b *SSEBroadcaster) broadcastHostStats(ctx context.Context) {
 	if changed {
 		b.hub.Broadcast("host:stats", html)
 	}
+}
+
+// broadcastHostStatsForce sends host stats without change detection (for initial load)
+func (b *SSEBroadcaster) broadcastHostStatsForce(ctx context.Context) {
+	stats := b.hostStats.GetStats(ctx)
+	html := RenderHostStats(stats)
+
+	b.mu.Lock()
+	b.prevHostHash = hashString(html)
+	b.mu.Unlock()
+
+	b.hub.Broadcast("host:stats", html)
 }
 
 // BroadcastCloneProgress sends clone job progress updates
