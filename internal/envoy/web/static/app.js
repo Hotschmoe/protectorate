@@ -1502,7 +1502,7 @@ async function refreshConfig() {
         setInputValue('config-server-port', config.server?.port);
     } catch (err) {
         console.error('Failed to refresh config:', err);
-        notify.error('Config Error', 'Failed to load configuration');
+        notify.error('Config Error', { detail: 'Failed to load configuration' });
     }
 }
 
@@ -1517,7 +1517,7 @@ async function saveConfig(key) {
     const inputId = 'config-' + key.replace(/\./g, '-');
     const input = document.getElementById(inputId);
     if (!input) {
-        notify.error('Config Error', `Input not found for ${key}`);
+        notify.error('Config Error', { detail: `Input not found for ${key}` });
         return;
     }
 
@@ -1542,13 +1542,13 @@ async function saveConfig(key) {
             statusEl.className = 'config-save-status saved';
             setTimeout(() => { statusEl.textContent = ''; }, 3000);
         }
-        notify.success('Config Saved', `${key} = ${result.value}`);
+        notify.success('Config Saved', { detail: `${key} = ${result.value}` });
     } catch (err) {
         if (statusEl) {
             statusEl.textContent = 'Save failed';
             statusEl.className = 'config-save-status error';
         }
-        notify.error('Config Error', err.message);
+        notify.error('Config Error', { detail: err.message });
     }
 }
 
@@ -1592,7 +1592,7 @@ async function saveAuthKey(provider) {
 
     const token = input.value.trim();
     if (!token) {
-        notify.error('Auth Error', 'Please enter an API key');
+        notify.error('Auth Error', { detail: 'Please enter an API key' });
         return;
     }
 
@@ -1609,10 +1609,10 @@ async function saveAuthKey(provider) {
         }
 
         input.value = '';
-        notify.success('Auth Saved', `${provider} credentials saved successfully`);
+        notify.success('Auth Saved', { detail: `${provider} credentials saved successfully` });
         refreshAuthStatus();
     } catch (err) {
-        notify.error('Auth Error', err.message);
+        notify.error('Auth Error', { detail: err.message });
     }
 }
 
@@ -1631,10 +1631,10 @@ async function revokeAuth(provider) {
             throw new Error(result.error || 'Failed to revoke credentials');
         }
 
-        notify.success('Auth Revoked', `${provider} credentials removed`);
+        notify.success('Auth Revoked', { detail: `${provider} credentials removed` });
         refreshAuthStatus();
     } catch (err) {
-        notify.error('Auth Error', err.message);
+        notify.error('Auth Error', { detail: err.message });
     }
 }
 

@@ -1356,18 +1356,8 @@ td { color: var(--text-primary); }
     margin-left: 0.5rem;
 }
 
-/* Small Buttons */
+/* Small Buttons - alias for btn-small */
 .btn-sm {
     padding: 0.25rem 0.5rem;
     font-size: var(--text-xs);
-}
-
-.btn-danger {
-    border-color: var(--magenta-dim);
-    color: var(--magenta-glow);
-}
-
-.btn-danger:hover {
-    background: rgba(255, 0, 85, 0.15);
-    border-color: var(--magenta-glow);
 }

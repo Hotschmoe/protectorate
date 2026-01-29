@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -174,8 +175,10 @@ func (c *EnvoyConfig) loadFromYAML() {
 	if err != nil {
 		return // File doesn't exist or unreadable - use defaults
 	}
-	// Unmarshal into the config, overwriting defaults
-	yaml.Unmarshal(data, c)
+	if err := yaml.Unmarshal(data, c); err != nil {
+		log.Printf("Warning: failed to parse config file %s: %v (using defaults)", c.configPath, err)
+		return
+	}
 }
 
 // applyEnvOverrides applies environment variable overrides (highest precedence).
